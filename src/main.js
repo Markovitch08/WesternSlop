@@ -3,6 +3,8 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { createEnvironment } from './environment.js';
+import { AtmosphereManager } from './environment/AtmosphereManager.js';
+import { AudioEnvironment } from './audio/AudioEnvironment.js';
 import { XRManager } from './xr/XRManager.js';
 import { Revolver } from './weapons/Revolver.js';
 import { Holster } from './weapons/Holster.js';
@@ -26,7 +28,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // soft golden-hour shadows
 
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
@@ -61,14 +63,20 @@ orbit.update();
 // ---------------------------------------------------------------------------
 const physics = new PhysicsWorld();
 const environment = createEnvironment(scene, renderer, physics);
+const atmosphere = new AtmosphereManager(scene, renderer, {
+  groundColliders: environment.colliders.filter((c) => c.name === 'ground' || c.name === 'bench'),
+  physics,
+});
 const xr = new XRManager(renderer, playerRig);
 const sfx = new SoundFX();
 const fx = new ParticleFX(scene);
+fx.wind = atmosphere.wind.vector; // smoke and dust drift on the same wind as everything else
 const casings = new CasingFX(scene, physics, sfx);
 const targets = new TargetManager(scene, { sfx, camera, physics, fx });
 const impacts = new ImpactFX(scene);
 const holster = new Holster(scene, 'right');
-const colliders = [...environment.colliders];
+const staticColliders = [...environment.colliders, ...atmosphere.colliders];
+const colliders = [...staticColliders];
 const revolver = new Revolver({
   xr,
   holster,
@@ -79,7 +87,7 @@ const revolver = new Revolver({
   fx,
   casings,
   getColliders: () => {
-    colliders.length = environment.colliders.length;
+    colliders.length = staticColliders.length;
     colliders.push(...targets.colliders);
     return colliders;
   },
@@ -97,13 +105,15 @@ const duel = new DuelMode({ targets, revolver, sfx, xr, fx, camera, hud: new Due
 revolver.addEventListener('shot', (shot) => targets.handleShot(shot));
 
 // Audio may only start after a user gesture: the ENTER VR click counts.
-window.addEventListener('pointerdown', () => sfx.unlock());
+// Spatial audio: listener on the headset, ambience, terrain echoes. The
+// AudioContext resumes on the first click / trigger / grip / XR session start.
+const audio = new AudioEnvironment(camera, scene, sfx, environment.reflectors);
+audio.installUnlockHandlers(renderer, xr);
 xr.addEventListener('connected', ({ hand }) =>
   console.info(`[XR] ${hand.handedness} controller connected (${hand.inputSource.profiles[0] ?? 'unknown'})`),
 );
 
 renderer.xr.addEventListener('sessionstart', () => {
-  sfx.unlock();
   orbit.enabled = false;
   // The XR camera pose is absolute relative to the rig; clear the desktop offset.
   camera.position.set(0, 0, 0);
@@ -139,12 +149,13 @@ renderer.setAnimationLoop(() => {
   casings.update(dt);
   fx.update(dt);
   duel.update(dt);
-  environment.update(dt);
+  atmosphere.update(dt, camera);
   sfx.updateListener(camera);
+  audio.update(dt, atmosphere.wind);
   if (orbit.enabled) orbit.update();
 
   renderer.render(scene, camera);
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, atmosphere, audio };

@@ -17,6 +17,7 @@ const SUITES = {
   physics: require('./suites/physics.cjs'),
   reload: require('./suites/reload.cjs'),
   duel: require('./suites/duel.cjs'),
+  atmosphere: require('./suites/atmosphere.cjs'),
 };
 
 (async () => {
@@ -30,7 +31,11 @@ const SUITES = {
   });
   await server.listen();
   const url = server.resolvedUrls.local[0];
-  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+  // Autoplay allowed so the audio system really runs (it unlocks on the fake
+  // controller presses, as it would on a headset).
+  const browser = await chromium.launch({
+    args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'],
+  });
 
   let total = 0;
   let failed = 0;

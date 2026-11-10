@@ -37,7 +37,8 @@ export class CasingFX {
         const speed = Math.abs(e.contact.getImpactVelocityAlongNormal());
         if (speed > 0.25 && item.tinkCooldown <= 0) {
           item.tinkCooldown = 0.06;
-          this.sfx.brassTink(_p.set(body.position.x, body.position.y, body.position.z).clone(), speed);
+          const surface = e.body.userData?.name === 'casing' ? 'steel' : e.body.userData?.surface ?? 'sand';
+          this.sfx.brassTink(_p.set(body.position.x, body.position.y, body.position.z).clone(), speed, surface);
         }
       });
       this.mesh.setMatrixAt(i, _m.compose(_zero, _q.identity(), _zero));

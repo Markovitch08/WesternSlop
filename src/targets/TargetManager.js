@@ -154,6 +154,7 @@ export class TargetManager extends THREE.EventDispatcher {
       this.fx.impact(hit.point, normal, surfaceTag, shot.direction);
     }
 
+    hit.object.userData.onBulletHit?.(hit, shot); // e.g. tumbleweeds get knocked along
     const target = hit.object.userData.target;
     const result = target ? target.onHit(hit, shot, this.time) : null;
     if (result) return this.#score(result, hit, shot, target);

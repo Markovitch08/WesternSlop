@@ -189,7 +189,5 @@ module.exports = async function reloadSuite() {
   tm.handleShot({ origin: V(0, 1.5, 0), direction: V(0, -0.3, -1).normalize(), hit: { point: V(0.5, 0, -4), object: g.environment.colliders[0], face: { normal: V(0, 0, 1) } } });
   check('sand hit kicks up dust', fx.smoke.activeCount > smoke1, fx.smoke.activeCount);
 
-  // --- Outdoor echoes ------------------------------------------------------------------
-  check('echo send is a high-passed, non-feedback convolution', sfx.outdoor == null || sfx.outdoor.type === 'highpass');
   return out;
 };

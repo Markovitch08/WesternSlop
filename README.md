@@ -52,6 +52,26 @@ Every score is multiplied by the distance factor 1 + distance / 15. The chalkboa
 accuracy, headshots, duels won or missed, and best and average draw times. Each hit also shows a floating
 pop-up with points, zone, distance and reaction time.
 
+## Atmosphere and sound
+
+- **Light:** a low golden-hour sun (`0xffb56b`) with long, soft shadows and a cool violet ambient fill
+  (`0x332244`) for contrast, plus image-based light for the metal. It drifts slowly across the sky.
+- **Haze:** exponential dust fog (`0xc29b6c`, density 0.015), with the sky fading into it at the horizon. The
+  mesas show through as silhouettes.
+- **Wind:** one wind with slow gusts and veer. It carries about 800 dust motes around you, the gun smoke, two
+  tumbleweeds and the lanterns. The tumbleweeds roll and hop across the ground using a raycast against it, and
+  you can shoot them.
+- **Lanterns:** two oil lanterns hang beside the firing line and the plates. Their lights flicker and they
+  sway in the wind; the one by the bench casts small soft shadows.
+- **Spatial audio:** a `THREE.AudioListener` sits on the headset.
+  - The ambient bed is canyon wind that swells with the gusts, a whistle through the boards, occasional
+    saloon creaks and dry crickets.
+  - The gunshot's snap comes from the muzzle. A few faint echoes come back from the saloon front and the mesa
+    faces, delayed by the real round trip and duller with distance. There is no reverb.
+  - Impacts and brass are positional. Gongs fade with exponential distance falloff, and spent cases sound
+    different on dirt, wood and steel.
+- **Unlock:** audio starts on your first click, trigger or grip press, or when the VR session starts.
+
 ## Quick-draw duel mode
 
 Shoot the black **DUEL** plate to take on five outlaws in a row, each faster on the draw than the last
@@ -84,7 +104,9 @@ return, and checks the sights both geometrically and by aiming with them and fir
 cylinder, checks that the ejected cases are physics objects, loads from the pouch, closes with B and with a wrist
 flick, fires the reloaded rounds, and checks bullet drop, smoke, sparks and dust. The duel suite starts a duel from the plate,
 checks the holster prompt, countdown and foul, wins a round by drawing and shooting, loses the next by being
-too slow, and checks the summary and the return to free play. Run one suite with
+too slow, and checks the summary and the return to free play. The atmosphere suite checks the light, fog and sky, dust and wind,
+tumbleweeds, lanterns, and the audio system (unlock, listener, ambient layers, echoes, positional effects).
+Tests run Chromium with autoplay allowed so the audio graph really runs. Run one suite with
 `npm test -- targets`. It needs the
 `playwright` package and a Chromium build available to Node.
 
@@ -93,7 +115,9 @@ too slow, and checks the summary and the return to free play. Run one suite with
 | File | Responsibility |
 | --- | --- |
 | `src/main.js` | Renderer, scene, player rig, WebXR session, render loop |
-| `src/environment.js` | Sky dome, drifting sun with shadows, sand, saloon, fences, barrels, cacti, mesas, dust motes |
+| `src/environment.js` | Range geometry: sand, saloon, fences, barrels, cacti, mesas, echo reflectors |
+| `src/environment/AtmosphereManager.js` | Golden-hour sun and fill, fog, sky, wind, dust, tumbleweeds, lanterns |
+| `src/audio/AudioEnvironment.js` | Listener on the headset, ambient bed, terrain echo emitters, audio unlock |
 | `src/xr/XRManager.js` | Controller tracking and models, button polling with edge detection, raycasting, haptics |
 | `src/weapons/Revolver.js` | Revolver model, grip snapping, hammer/trigger/cylinder logic, raycast fire, recoil, flash, haptics |
 | `src/weapons/Holster.js` | Hip holster that follows the player's body |

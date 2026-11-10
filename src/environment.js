@@ -1,11 +1,14 @@
 import * as THREE from 'three';
-import { plankTexture, sandTexture, dustSprite, signTexture } from './util/canvasTextures.js';
+import { plankTexture, sandTexture, signTexture } from './util/canvasTextures.js';
 import { worldBox, place, tint, merge, barrelGeometry } from './util/geometry.js';
 
 /**
- * Desert shooting range: sky dome, slowly drifting afternoon sun with shadows,
- * sand floor, saloon facade, barrels, cacti, fences, distance markers, far
- * mesas and drifting dust motes.
+ * Desert shooting range geometry: sand floor, saloon facade, barrels, cacti,
+ * fences, distance markers and the mesas on the horizon. Light, fog, sky,
+ * dust, wind and tumbleweeds live in environment/AtmosphereManager.js.
+ *
+ * `reflectors` lists the big surfaces a gunshot echoes off (the saloon front
+ * and the mesa faces), for AudioEnvironment.
  *
  * Every mesh a bullet can hit is returned in `colliders`, tagged with
  * `userData.surface` ('sand' | 'wood' | 'plant' | 'steel') so impacts can pick
@@ -33,31 +36,6 @@ export function createEnvironment(scene, renderer, physics) {
     scene.add(mesh);
     return mesh;
   };
-
-  // --- Sky, fog and image-based lighting ------------------------------------
-  const horizon = new THREE.Color(0xecd2a6);
-  scene.background = horizon;
-  scene.fog = new THREE.Fog(horizon, 45, 260);
-  scene.environment = createDesertEnvMap(renderer);
-  scene.add(createSkyDome(horizon));
-
-  const hemi = new THREE.HemisphereLight(0xfff1d6, 0xa0703f, 0.55);
-  scene.add(hemi);
-
-  // --- Sun -----------------------------------------------------------------------
-  // The shadow frustum is a fixed box over the range (bench to saloon), so the
-  // map resolution is spent where the player looks.
-  const sun = new THREE.DirectionalLight(0xffd9a0, 2.6);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  const sc = sun.shadow.camera;
-  sc.left = -16; sc.right = 16; sc.top = 20; sc.bottom = -20; sc.near = 1; sc.far = 90;
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.02;
-  sun.target.position.set(0, 0, -14);
-  scene.add(sun, sun.target);
-  const sunWarm = new THREE.Color(0xffb070);
-  const sunHigh = new THREE.Color(0xfff0d8);
 
   // --- Ground --------------------------------------------------------------------
   const sandTex = sandTexture();
@@ -158,39 +136,26 @@ export function createEnvironment(scene, renderer, physics) {
     solid(sign, 'wood');
   }
 
-  // Far mesas: scenery only, no shadows, no colliders.
+  // Mesas: scenery only, no shadows, no colliders. Close enough (70–95 m) to
+  // read as hazy silhouettes through the exponential fog.
   const mesaGeos = [];
-  const mesaSpots = [[-120, -190, 60, 28], [-40, -230, 45, 36], [70, -210, 70, 30], [170, -150, 50, 24], [-190, -90, 40, 20]];
+  const mesaSpots = [[-60, -80, 30, 16], [-15, -95, 24, 20], [40, -88, 34, 18], [85, -60, 26, 14], [-90, -40, 22, 12]];
   for (const [x, z, r, h] of mesaSpots) {
-    mesaGeos.push(tint(place(new THREE.CylinderGeometry(r * 0.7, r, h, 7), x, h / 2, z), 0xb4643c));
-    mesaGeos.push(tint(place(new THREE.CylinderGeometry(r * 0.72, r * 0.7, 2, 7), x, h + 1, z), 0xc77a4a));
+    mesaGeos.push(tint(place(new THREE.CylinderGeometry(r * 0.7, r, h, 7), x, h / 2, z), 0xa85a36));
+    mesaGeos.push(tint(place(new THREE.CylinderGeometry(r * 0.72, r * 0.7, 1.5, 7), x, h + 0.75, z), 0xbb6e44));
   }
   const mesas = new THREE.Mesh(merge(mesaGeos), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
+  mesas.name = 'mesas';
   scene.add(mesas);
 
-  // --- Dust motes -----------------------------------------------------------------
-  const dust = createDust(scene);
-
-  // --- Per-frame -------------------------------------------------------------------
-  let time = 0;
-  const DAY_PERIOD = 600; // seconds for one full sway of the sun
-  const sunDir = new THREE.Vector3();
-  function update(dt) {
-    time += dt;
-    // The sun slowly sweeps across the afternoon sky; shadows follow.
-    const azimuth = 2.4 + Math.sin((time / DAY_PERIOD) * Math.PI * 2) * 0.45;
-    const elevation = 0.62 + Math.sin((time / (DAY_PERIOD * 1.5)) * Math.PI * 2) * 0.16;
-    sunDir.set(Math.cos(elevation) * Math.sin(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.cos(azimuth));
-    sun.position.copy(sun.target.position).addScaledVector(sunDir, 45);
-    const k = THREE.MathUtils.smoothstep(elevation, 0.4, 0.8);
-    sun.color.lerpColors(sunWarm, sunHigh, k);
-    sun.intensity = 2.2 + k * 0.6;
-
-    dust.update(dt, time);
+  // Echo reflectors: the saloon front and the face of each mesa nearest the range.
+  const reflectors = [{ name: 'saloon', position: V(0, 3, -31.8), reflectivity: 0.5 }];
+  for (const [x, z, r, h] of mesaSpots) {
+    const toRange = V(-x, 0, -z).normalize();
+    reflectors.push({ name: 'mesa', position: V(x, h * 0.4, z).addScaledVector(toRange, r * 0.85), reflectivity: 0.8 });
   }
-  update(0);
 
-  return { sun, colliders, update, dust };
+  return { colliders, reflectors, mesas };
 }
 
 // ---------------------------------------------------------------------------
@@ -258,104 +223,4 @@ function saguaro(x, z, rot, scale) {
   geo.rotateY(rot);
   geo.translate(x, 0, z);
   return geo;
-}
-
-function createSkyDome(horizon) {
-  const geo = new THREE.SphereGeometry(280, 32, 16);
-  const zenith = new THREE.Color(0x6fa2d8);
-  const mid = new THREE.Color(0xb9d1e6);
-  const col = new THREE.Color();
-  const pos = geo.attributes.position;
-  const colors = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i) / 280;
-    if (y <= 0) col.copy(horizon);
-    else if (y < 0.25) col.lerpColors(horizon, mid, y / 0.25);
-    else col.lerpColors(mid, zenith, Math.min(1, (y - 0.25) / 0.6));
-    colors.set([col.r, col.g, col.b], i * 3);
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const dome = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-    vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false,
-  }));
-  dome.renderOrder = -1;
-  dome.name = 'sky';
-  return dome;
-}
-
-/**
- * Dust motes drifting on the wind through the sunlit range. CPU-updated
- * Points: a few hundred particles cost well under 0.1 ms per frame.
- */
-function createDust(scene, count = 360) {
-  const box = { x: 16, y: 5, zMin: -34, zMax: 4 };
-  const positions = new Float32Array(count * 3);
-  const seeds = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    positions[i * 3] = (Math.random() * 2 - 1) * box.x;
-    positions[i * 3 + 1] = Math.random() * box.y;
-    positions[i * 3 + 2] = box.zMin + Math.random() * (box.zMax - box.zMin);
-    seeds[i] = Math.random() * 100;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const points = new THREE.Points(geo, new THREE.PointsMaterial({
-    size: 0.045, map: dustSprite(), color: 0xf6e2bf, transparent: true, opacity: 0.6,
-    depthWrite: false, sizeAttenuation: true,
-  }));
-  points.frustumCulled = false;
-  points.name = 'dust';
-  scene.add(points);
-
-  const wind = new THREE.Vector3(0.55, 0, -0.18);
-  return {
-    points,
-    update(dt, t) {
-      for (let i = 0; i < count; i++) {
-        const s = seeds[i];
-        const ix = i * 3;
-        positions[ix] += (wind.x + Math.sin(t * 0.7 + s) * 0.2) * dt;
-        positions[ix + 1] += Math.sin(t * 1.1 + s * 1.7) * 0.06 * dt;
-        positions[ix + 2] += (wind.z + Math.cos(t * 0.5 + s) * 0.15) * dt;
-        if (positions[ix] > box.x) positions[ix] -= 2 * box.x;
-        if (positions[ix + 1] < 0.05) positions[ix + 1] = box.y;
-        if (positions[ix + 1] > box.y) positions[ix + 1] = 0.05;
-        if (positions[ix + 2] < box.zMin) positions[ix + 2] = box.zMax;
-        if (positions[ix + 2] > box.zMax) positions[ix + 2] = box.zMin;
-      }
-      geo.attributes.position.needsUpdate = true;
-    },
-  };
-}
-
-/**
- * Image-based lighting for metals: a pre-filtered sky-over-sand gradient with
- * a hot spot toward the sun. Built once at startup, so it costs nothing per frame.
- */
-function createDesertEnvMap(renderer) {
-  const envScene = new THREE.Scene();
-  const geo = new THREE.SphereGeometry(10, 32, 16);
-  const colors = [];
-  const pos = geo.attributes.position;
-  const sky = new THREE.Color(0xb8d4f0);
-  const horizon = new THREE.Color(0xf5dcb0);
-  const sand = new THREE.Color(0x8a6238);
-  const c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i) / 10;
-    if (y > 0) c.lerpColors(horizon, sky, Math.pow(y, 0.6));
-    else c.lerpColors(horizon, sand, Math.min(1, -y * 3));
-    colors.push(c.r, c.g, c.b);
-  }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  envScene.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-  const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.2, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0d0 }));
-  sunDisc.position.set(-5, 7.5, 3.3);
-  envScene.add(sunDisc);
-
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const target = pmrem.fromScene(envScene, 0.02);
-  pmrem.dispose();
-  geo.dispose();
-  return target.texture;
 }

@@ -97,7 +97,7 @@ module.exports = async function targetsSuite() {
   const surfaces = new Set(env.colliders.map((c) => c.userData.surface));
   check('environment colliders tagged (sand/wood/plant)', ['sand', 'wood', 'plant'].every((s) => surfaces.has(s)), [...surfaces]);
   check('saloon is solid wood', env.colliders.some((c) => c.parent?.name === 'saloon' && c.userData.surface === 'wood'));
-  const dustPos = env.dust.points.geometry.attributes.position;
+  const dustPos = g.atmosphere.dust.points.geometry.attributes.position;
   const x0 = dustPos.getX(0);
   await frames(5);
   check('dust drifts', dustPos.getX(0) !== x0);

@@ -2,27 +2,30 @@ import * as THREE from 'three';
 
 const SPEED_OF_SOUND = 343; // m/s
 const _pos = new THREE.Vector3();
-const _quat = new THREE.Quaternion();
-const _fwd = new THREE.Vector3();
-const _up = new THREE.Vector3();
 
 /**
  * Synthesised sound effects (Web Audio, no asset files).
  *
- * The AudioContext can only start after a user gesture, so call unlock() from
- * a click / XR session start. Every play method is a no-op until then.
+ * AudioEnvironment owns the AudioContext and the THREE.AudioListener on the
+ * headset; once audio is unlocked it calls attach() and every effect plays
+ * into the listener. Until then every play method is a no-op (but is still
+ * counted in `played`, which tests use).
  *
- * Impact sounds are positional (equal-power panning, distance roll-off) and
- * arrive late by distance / speed of sound: a steel gong at 25 m rings ~70 ms
- * after the shot, like on a real range.
+ * Impact sounds are positional (equal-power panning) and arrive late by
+ * distance / speed of sound: a steel gong at 25 m rings ~70 ms after the shot.
+ * Gongs fade with exponential distance decay; most else with inverse roll-off.
+ * The gunshot's snap is placed at the muzzle; its echoes come back from the
+ * terrain via AudioEnvironment's echo emitters.
  */
 export class SoundFX {
   constructor() {
     this.ctx = null;
     this.master = null;
     this.noise = null;
-    this.outdoor = null;
+    this.echoSend = null;
     this.listenerPos = new THREE.Vector3();
+    /** Last panner created (debugging and tests). */
+    this.lastPanner = null;
     /** Counts of each sound played; handy for tests and debugging. */
     this.played = {};
   }
@@ -31,43 +34,27 @@ export class SoundFX {
     this.played[name] = (this.played[name] ?? 0) + 1;
   }
 
-  /** Keep the Web Audio listener on the player's head. Call once per frame. */
+  /**
+   * Track the player's head for travel-time delays. (The Web Audio listener
+   * itself is moved by the THREE.AudioListener on the camera.)
+   */
   updateListener(camera) {
     camera.getWorldPosition(_pos);
     this.listenerPos.copy(_pos);
-    if (!this.ctx) return;
-    camera.getWorldQuaternion(_quat);
-    _fwd.set(0, 0, -1).applyQuaternion(_quat);
-    _up.set(0, 1, 0).applyQuaternion(_quat);
-    const l = this.ctx.listener;
-    if (l.positionX) {
-      const t = this.ctx.currentTime;
-      l.positionX.setValueAtTime(_pos.x, t);
-      l.positionY.setValueAtTime(_pos.y, t);
-      l.positionZ.setValueAtTime(_pos.z, t);
-      l.forwardX.setValueAtTime(_fwd.x, t);
-      l.forwardY.setValueAtTime(_fwd.y, t);
-      l.forwardZ.setValueAtTime(_fwd.z, t);
-      l.upX.setValueAtTime(_up.x, t);
-      l.upY.setValueAtTime(_up.y, t);
-      l.upZ.setValueAtTime(_up.z, t);
-    } else {
-      l.setPosition(_pos.x, _pos.y, _pos.z);
-      l.setOrientation(_fwd.x, _fwd.y, _fwd.z, _up.x, _up.y, _up.z);
-    }
   }
 
   /**
    * A panner at `position` feeding the master bus, plus the start time
    * delayed by the sound's travel time to the listener.
    */
-  #spatial(position, gain = 1) {
+  #spatial(position, gain = 1, { model = 'inverse', ref = 3, rolloff = 0.7 } = {}) {
     const ctx = this.ctx;
     const p = ctx.createPanner();
     p.panningModel = 'equalpower'; // HRTF is too heavy for standalone headsets
-    p.distanceModel = 'inverse';
-    p.refDistance = 3;
-    p.rolloffFactor = 0.7;
+    p.distanceModel = model;
+    p.refDistance = ref;
+    p.rolloffFactor = rolloff;
+    this.lastPanner = p;
     if (p.positionX) {
       p.positionX.value = position.x;
       p.positionY.value = position.y;
@@ -82,14 +69,18 @@ export class SoundFX {
     return { dest: g, t: ctx.currentTime + delay };
   }
 
-  unlock() {
-    if (!this.ctx) {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      this.ctx = new Ctx();
-      this.#build();
-    }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+  /**
+   * Start playing into `output` (the listener's input) on `ctx`.
+   * @param {BaseAudioContext} ctx
+   * @param {AudioNode} output
+   * @param {AudioNode} [echoSend] where gunshots send their echo feed
+   */
+  attach(ctx, output, echoSend = null) {
+    if (this.ctx) return;
+    this.ctx = ctx;
+    this.output = output;
+    this.echoSend = echoSend;
+    this.#build();
   }
 
   #build() {
@@ -102,34 +93,13 @@ export class SoundFX {
     comp.release.value = 0.3;
     this.master = ctx.createGain();
     this.master.gain.value = 0.9;
-    this.master.connect(comp).connect(ctx.destination);
+    this.master.connect(comp).connect(this.output);
 
     // Two seconds of white noise, reused by every effect.
     const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     this.noise = buf;
-
-    // Outdoor acoustics for the gunshot. There's no room out here: what you
-    // hear after the bang is a handful of distinct, smeared, high-cut echoes
-    // off the saloon and the distant mesas, and a low rolling tail. All of it
-    // lives in one convolution impulse response (no feedback loops, so nothing
-    // repeats at a fixed interval).
-    const conv = ctx.createConvolver();
-    conv.normalize = false;
-    conv.buffer = this.#outdoorResponse();
-    // High-pass the send: the sub-bass boom stays dry and close; only the
-    // crack and blast carry far enough to come back as echoes.
-    const sendHp = ctx.createBiquadFilter();
-    sendHp.type = 'highpass';
-    sendHp.frequency.value = 250;
-    sendHp.Q.value = 0.7;
-    const outdoorOut = ctx.createGain();
-    outdoorOut.gain.value = 0.5;
-    sendHp.connect(conv).connect(outdoorOut).connect(this.master);
-    this.outdoor = sendHp;
-    /** Level of the echoes (0 = dry gunshot). */
-    this.outdoorLevel = outdoorOut.gain;
 
     // Soft clipper for the gunshot bus: adds weight and punch to the boom.
     const shaper = ctx.createWaveShaper();
@@ -143,53 +113,6 @@ export class SoundFX {
     shaper.curve = curve;
     shaper.oversample = '2x';
     this.shotShaper = shaper;
-  }
-
-  /**
-   * Stereo impulse response of the open range (no direct sound):
-   *  - saloon facade, 32 m away: a fairly bright echo at ~0.19 s
-   *  - a gully to the left at ~95 m: faint echo at ~0.55 s
-   *  - mesas at 200–230 m, left and right: dark, smeared echoes at ~1.15–1.35 s
-   *  - a low "rolling thunder" wash underneath
-   * Each echo is band-limited noise with a short rise and exponential decay,
-   * scaled so its energy equals gain² (the convolver doesn't normalise).
-   */
-  #outdoorResponse() {
-    const ctx = this.ctx;
-    const sr = ctx.sampleRate;
-    const len = Math.floor(sr * 3.2);
-    const buf = ctx.createBuffer(2, len, sr);
-    const L = buf.getChannelData(0);
-    const R = buf.getChannelData(1);
-
-    const addBurst = (t0, gain, cutoff, rise, decay, pan) => {
-      const start = Math.floor(t0 * sr);
-      const n = Math.min(len - start, Math.floor((rise + decay * 5) * sr));
-      const a = 1 - Math.exp((-2 * Math.PI * cutoff) / sr);
-      for (const [ch, chGain] of [[L, Math.sqrt((1 - pan) / 2)], [R, Math.sqrt((1 + pan) / 2)]]) {
-        const tmp = new Float32Array(n);
-        let s1 = 0;
-        let s2 = 0;
-        let energy = 0;
-        for (let i = 0; i < n; i++) {
-          const t = i / sr;
-          const env = t < rise ? t / rise : Math.exp(-(t - rise) / decay);
-          s1 += a * ((Math.random() * 2 - 1) - s1); // two one-pole low-passes
-          s2 += a * (s1 - s2);
-          tmp[i] = s2 * env;
-          energy += tmp[i] * tmp[i];
-        }
-        const k = (gain * chGain * Math.SQRT2) / Math.sqrt(energy || 1);
-        for (let i = 0; i < n; i++) ch[start + i] += tmp[i] * k;
-      }
-    };
-
-    addBurst(0.187, 0.3, 2600, 0.008, 0.045, 0.15); // saloon
-    addBurst(0.55, 0.1, 1500, 0.02, 0.1, -0.4); // gully
-    addBurst(1.16, 0.18, 900, 0.05, 0.18, -0.65); // mesa left
-    addBurst(1.34, 0.13, 750, 0.06, 0.22, 0.6); // mesa right
-    addBurst(0.08, 0.16, 380, 0.3, 0.9, 0); // rolling tail
-    return buf;
   }
 
   #noiseBurst(t, dur, filterType, freqStart, freqEnd, gain, dest = this.master) {
@@ -224,10 +147,12 @@ export class SoundFX {
 
   /**
    * Black-powder revolver report: a supersonic crack, a long dark blast, a
-   * sub-bass boom you feel in the chest, soft-clipped for weight, then the
-   * desert answers: an echo off the saloon and late, dark ones off the mesas.
+   * sub-bass boom you feel in the chest, soft-clipped for weight. It sounds
+   * from the muzzle (`position`); faint echoes come back off the terrain via
+   * the echo send.
+   * @param {THREE.Vector3} [position] muzzle, world space
    */
-  gunshot() {
+  gunshot(position = null) {
     this.#count('gunshot');
     if (!this.ctx) return;
     const ctx = this.ctx;
@@ -236,10 +161,10 @@ export class SoundFX {
     bus.gain.value = 1.1;
     const post = ctx.createGain();
     post.gain.value = 0.85;
-    bus.connect(this.shotShaper).connect(post).connect(this.master);
-    const send = ctx.createGain();
-    send.gain.value = 0.9;
-    post.connect(send).connect(this.outdoor);
+    // At arm's length: barely any distance loss, just placement.
+    const out = position ? this.#spatial(position, 1, { ref: 1, rolloff: 0.05 }).dest : this.master;
+    bus.connect(this.shotShaper).connect(post).connect(out);
+    if (this.echoSend) post.connect(this.echoSend);
 
     this.#noiseBurst(t, 0.04, 'highpass', 3000, 1800, 0.9, bus); // crack
     this.#noiseBurst(t, 0.22, 'bandpass', 900, 220, 1.0, bus); // mid punch
@@ -299,7 +224,8 @@ export class SoundFX {
   steelPing(position, radius = 0.2) {
     this.#count('steel');
     if (!this.ctx) return;
-    const { dest, t } = this.#spatial(position, 1.2);
+    // Exponential distance decay: (d / 2 m) ^ -0.9.
+    const { dest, t } = this.#spatial(position, 1.5, { model: 'exponential', ref: 2, rolloff: 0.9 });
     const f = 170 / radius;
     // Inharmonic partials of a free circular plate.
     const partials = [[1, 0.5, 1.8], [2.32, 0.28, 1.1], [4.25, 0.16, 0.7], [6.63, 0.08, 0.45]];
@@ -416,15 +342,31 @@ export class SoundFX {
     this.#tone(t + 0.04, 0.03, 'triangle', 2200, 1700, 0.2);
   }
 
-  /** Empty brass case hitting something: short bright ring. */
-  brassTink(position, speed = 1) {
+  /**
+   * Empty brass case landing. On dirt it's a dull tick with almost no ring
+   * (the sand swallows it); on floorboards a hollow knock and a short ring; on
+   * steel or another case a bright, longer ring.
+   * @param {'sand'|'wood'|'steel'|string} surface
+   */
+  brassTink(position, speed = 1, surface = 'sand') {
     this.#count('brass');
+    this.#count(`brass:${surface}`);
     if (!this.ctx) return;
-    const { dest, t } = this.#spatial(position, Math.min(0.9, 0.25 + speed * 0.25));
+    const level = Math.min(0.9, 0.25 + speed * 0.25);
+    const { dest, t } = this.#spatial(position, level, { ref: 1.5, rolloff: 1 });
     const f = 3400 + Math.random() * 1600;
-    this.#tone(t, 0.22, 'sine', f, f, 0.3, dest);
-    this.#tone(t, 0.14, 'sine', f * 1.51, f * 1.5, 0.15, dest);
-    this.#tone(t, 0.08, 'sine', f * 2.37, f * 2.35, 0.08, dest);
+    if (surface === 'sand') {
+      this.#noiseBurst(t, 0.03, 'lowpass', 1800, 600, 0.5, dest);
+      this.#tone(t, 0.05, 'sine', f, f, 0.06, dest);
+    } else if (surface === 'wood') {
+      this.#noiseBurst(t, 0.05, 'bandpass', 900, 500, 0.6, dest);
+      this.#tone(t, 0.04, 'triangle', 320, 240, 0.25, dest);
+      this.#tone(t, 0.12, 'sine', f, f, 0.18, dest);
+    } else {
+      this.#tone(t, 0.3, 'sine', f, f, 0.3, dest);
+      this.#tone(t, 0.18, 'sine', f * 1.51, f * 1.5, 0.15, dest);
+      this.#tone(t, 0.1, 'sine', f * 2.37, f * 2.35, 0.08, dest);
+    }
   }
 
   /** Fingers in the leather cartridge pouch. */
@@ -458,10 +400,10 @@ export class SoundFX {
     this.#noiseBurst(t, 0.04, 'highpass', 2600, 1600, 0.9, dest);
     this.#noiseBurst(t, 0.6, 'lowpass', 2800, 120, 1.0, dest);
     this.#tone(t, 0.4, 'sine', 80, 32, 0.8, dest);
-    if (this.outdoor) {
+    if (this.echoSend) {
       const send = this.ctx.createGain();
       send.gain.value = 0.5;
-      dest.connect(send).connect(this.outdoor);
+      dest.connect(send).connect(this.echoSend);
     }
   }
 }

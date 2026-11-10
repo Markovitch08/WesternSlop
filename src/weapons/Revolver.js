@@ -567,7 +567,7 @@ export class Revolver extends THREE.EventDispatcher {
     this.flash.rotation.z = Math.random() * Math.PI;
     this.flash.scale.setScalar(0.8 + Math.random() * 0.5);
 
-    this.sfx.gunshot();
+    this.sfx.gunshot(origin);
     this.xr.pulse(this.hand, 1.0, 90);
     this.dispatchEvent({ type: 'shot', origin, direction, hit, chamber: this.chamberIndex });
   }
