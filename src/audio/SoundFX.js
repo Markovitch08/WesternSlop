@@ -26,6 +26,14 @@ export class SoundFX {
     this.listenerPos = new THREE.Vector3();
     /** Last panner created (debugging and tests). */
     this.lastPanner = null;
+    /**
+     * Per-sound nodes waiting to be disconnected: [{ nodes, until }]. Every
+     * sound builds a short-lived chain into the shared bus; leaving those
+     * chains connected makes the graph grow for as long as you play.
+     */
+    this.pending = [];
+    /** Chains disconnected so far (tests and debugging). */
+    this.disposed = 0;
     /** Counts of each sound played; handy for tests and debugging. */
     this.played = {};
   }
@@ -41,6 +49,28 @@ export class SoundFX {
   updateListener(camera) {
     camera.getWorldPosition(_pos);
     this.listenerPos.copy(_pos);
+    this.sweep();
+  }
+
+  /** Disconnect per-sound nodes whose sound has finished (by the audio clock). */
+  sweep() {
+    if (!this.ctx || !this.pending.length) return;
+    const now = this.ctx.currentTime;
+    let keep = 0;
+    for (const item of this.pending) {
+      if (item.until <= now) {
+        for (const n of item.nodes) n.disconnect();
+        this.disposed++;
+      } else {
+        this.pending[keep++] = item;
+      }
+    }
+    this.pending.length = keep;
+  }
+
+  /** Disconnect `nodes` once a sound starting at `t` is surely over. */
+  #disposeLater(nodes, t, length = 4) {
+    this.pending.push({ nodes, until: t + length });
   }
 
   /**
@@ -66,7 +96,9 @@ export class SoundFX {
     g.gain.value = gain;
     g.connect(p).connect(this.master);
     const delay = position.distanceTo(this.listenerPos) / SPEED_OF_SOUND;
-    return { dest: g, t: ctx.currentTime + delay };
+    const t = ctx.currentTime + delay;
+    this.#disposeLater([g, p], t);
+    return { dest: g, t };
   }
 
   /**
@@ -102,7 +134,6 @@ export class SoundFX {
     this.noise = buf;
 
     // Soft clipper for the gunshot bus: adds weight and punch to the boom.
-    const shaper = ctx.createWaveShaper();
     const n = 2048;
     const curve = new Float32Array(n);
     const k = 2.2;
@@ -110,9 +141,9 @@ export class SoundFX {
       const x = (i / (n - 1)) * 2 - 1;
       curve[i] = Math.tanh(k * x) / Math.tanh(k);
     }
-    shaper.curve = curve;
-    shaper.oversample = '2x';
-    this.shotShaper = shaper;
+    // Only the curve is shared: each shot gets its own shaper node (a shared
+    // node would gain one more output chain per shot and never lose it).
+    this.shotCurve = curve;
   }
 
   #noiseBurst(t, dur, filterType, freqStart, freqEnd, gain, dest = this.master) {
@@ -128,6 +159,7 @@ export class SoundFX {
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(f).connect(g).connect(dest);
+    src.onended = () => { src.disconnect(); f.disconnect(); g.disconnect(); };
     src.start(t, Math.random() * 0.5, dur + 0.05);
   }
 
@@ -141,6 +173,7 @@ export class SoundFX {
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g).connect(dest);
+    o.onended = () => { o.disconnect(); g.disconnect(); };
     o.start(t);
     o.stop(t + dur + 0.02);
   }
@@ -163,8 +196,12 @@ export class SoundFX {
     post.gain.value = 0.85;
     // At arm's length: barely any distance loss, just placement.
     const out = position ? this.#spatial(position, 1, { ref: 1, rolloff: 0.05 }).dest : this.master;
-    bus.connect(this.shotShaper).connect(post).connect(out);
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = this.shotCurve;
+    shaper.oversample = '2x';
+    bus.connect(shaper).connect(post).connect(out);
     if (this.echoSend) post.connect(this.echoSend);
+    this.#disposeLater([bus, shaper, post], t);
 
     this.#noiseBurst(t, 0.04, 'highpass', 3000, 1800, 0.9, bus); // crack
     this.#noiseBurst(t, 0.22, 'bandpass', 900, 220, 1.0, bus); // mid punch
@@ -404,6 +441,7 @@ export class SoundFX {
       const send = this.ctx.createGain();
       send.gain.value = 0.5;
       dest.connect(send).connect(this.echoSend);
+      this.#disposeLater([send], t);
     }
   }
 }

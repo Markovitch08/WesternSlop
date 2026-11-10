@@ -118,7 +118,9 @@ closes with B and with a wrist flick, fires the reloaded rounds, and checks bull
 checks the holster prompt, countdown and foul, wins a round by drawing and shooting, loses the next by being
 too slow, and checks the summary and the return to free play. The atmosphere suite checks the light, fog and sky, dust and wind,
 tumbleweeds, lanterns, and the audio system (unlock, listener, ambient layers, echoes, positional effects).
-Tests run Chromium with autoplay allowed so the audio graph really runs. Run one suite with
+Tests run Chromium with autoplay allowed so the audio graph really runs. The audio suite is a soak test: ten gunshots in a row must
+come out equally loud (a graph that grows per shot gets louder and costlier each time), and every sound's nodes
+must be disconnected once the sound is over. Run one suite with
 `npm test -- targets`. It needs the
 `playwright` package and a Chromium build available to Node.
 

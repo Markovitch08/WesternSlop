@@ -19,6 +19,7 @@ const SUITES = {
   duel: require('./suites/duel.cjs'),
   atmosphere: require('./suites/atmosphere.cjs'),
   modes: require('./suites/modes.cjs'),
+  audio: require('./suites/audio.cjs'),
 };
 
 (async () => {

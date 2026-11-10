@@ -128,6 +128,13 @@ export class AudioEnvironment {
       emitter.position.copy(r.position);
       emitter.name = `echo:${r.name}`;
       this.scene.add(emitter);
+      // The reflectors never move: place the panner once, then stop three.js
+      // from re-sending its position and orientation every frame (6 automation
+      // events per emitter per frame, for nothing).
+      emitter.updateMatrixWorld(true);
+      emitter.updateMatrixWorld = function (force) {
+        THREE.Object3D.prototype.updateMatrixWorld.call(this, force);
+      };
       this.echoes.push({ reflector: r, emitter, delay, lp, gain });
     }
     this.#retuneEchoes(true);
@@ -239,6 +246,7 @@ export class AudioEnvironment {
     const pan = ctx.createStereoPanner();
     pan.pan.value = (Math.random() * 2 - 1) * 0.5;
     o.connect(bp).connect(g).connect(pan).connect(this.creakBus);
+    o.onended = () => { for (const n of [o, lfo, lfoGain, bp, g, pan]) n.disconnect(); };
     o.start(t);
     lfo.start(t);
     o.stop(t + dur + 0.05);
