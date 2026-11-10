@@ -75,10 +75,16 @@ module.exports = async function reloadSuite() {
   check('drawn', rev.isHeld);
 
   // --- Fire two (double action), with smoke and sparks ---------------------------
+  // Sparks live 0.08-0.2 s, less than a few slow headless frames, so count
+  // them at the moment of the shot.
   const smoke0 = fx.smoke.activeCount;
+  let sparksAtShot = 0;
+  const onShot = () => { sparksAtShot = fx.sparks.activeCount; };
+  rev.addEventListener('shot', onShot);
   await pull(rgp);
-  check('muzzle smoke and sparks on firing', fx.smoke.activeCount > smoke0 && fx.sparks.activeCount > 0,
-    `smoke ${fx.smoke.activeCount} sparks ${fx.sparks.activeCount}`);
+  rev.removeEventListener('shot', onShot);
+  check('muzzle smoke and sparks on firing', fx.smoke.activeCount > smoke0 && sparksAtShot > 0,
+    `smoke ${fx.smoke.activeCount} sparks at shot ${sparksAtShot}`);
   await pull(rgp);
   check('two chambers spent', rev.chambers.filter((c) => c === 'spent').length === 2, rev.chambers.join(','));
   const shots = played('gunshot');

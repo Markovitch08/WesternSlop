@@ -435,4 +435,33 @@ export class SoundFX {
     this.#noiseBurst(t, 0.09, 'bandpass', 1200, 700, 0.25);
     this.#noiseBurst(t + 0.05, 0.03, 'highpass', 4000, 3500, 0.15);
   }
+
+  // -------------------------------------------------------------------------
+  // Duel mode
+  // -------------------------------------------------------------------------
+
+  /** Countdown beat: a dry wooden knock (lower and longer on the last beat). */
+  countdownTick(last = false) {
+    this.#count('tick');
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const f = last ? 420 : 620;
+    this.#tone(t, last ? 0.18 : 0.1, 'triangle', f, f * 0.8, 0.45);
+    this.#noiseBurst(t, 0.03, 'bandpass', 1800, 1200, 0.35);
+  }
+
+  /** The outlaw firing back from downrange: a positional, more distant report. */
+  outlawShot(position) {
+    this.#count('outlawShot');
+    if (!this.ctx) return;
+    const { dest, t } = this.#spatial(position, 1.6);
+    this.#noiseBurst(t, 0.04, 'highpass', 2600, 1600, 0.9, dest);
+    this.#noiseBurst(t, 0.6, 'lowpass', 2800, 120, 1.0, dest);
+    this.#tone(t, 0.4, 'sine', 80, 32, 0.8, dest);
+    if (this.outdoor) {
+      const send = this.ctx.createGain();
+      send.gain.value = 0.5;
+      dest.connect(send).connect(this.outdoor);
+    }
+  }
 }

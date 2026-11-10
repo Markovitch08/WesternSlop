@@ -83,13 +83,15 @@ export function dustSprite() {
 }
 
 /** Painted sign board with centred text. */
-export function signTexture(text, { w = 512, h = 128, bg = '#3b2414', fg = '#f1d9a6', font = 'bold 72px Georgia, serif' } = {}) {
+export function signTexture(text, { w = 512, h = 128, bg = '#3b2414', fg = '#f1d9a6', font = 'bold 72px Georgia, serif', border = true } = {}) {
   const [c, g] = makeCanvas(w, h);
   g.fillStyle = bg;
   g.fillRect(0, 0, w, h);
-  g.strokeStyle = fg;
-  g.lineWidth = 6;
-  g.strokeRect(10, 10, w - 20, h - 20);
+  if (border) {
+    g.strokeStyle = fg;
+    g.lineWidth = 6;
+    g.strokeRect(10, 10, w - 20, h - 20);
+  }
   g.fillStyle = fg;
   g.font = font;
   g.textAlign = 'center';

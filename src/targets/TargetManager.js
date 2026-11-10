@@ -5,7 +5,7 @@ import { BottleGroup } from './BottleGroup.js';
 import { ShardFX } from '../fx/ShardFX.js';
 import { FloatingText } from '../ui/FloatingText.js';
 import { Scoreboard } from '../ui/Scoreboard.js';
-import { plankTexture } from '../util/canvasTextures.js';
+import { plankTexture, signTexture } from '../util/canvasTextures.js';
 import { worldBox, barrelGeometry } from '../util/geometry.js';
 
 /** Where the player stands; targets turn to face this point. */
@@ -96,10 +96,12 @@ export class TargetManager extends THREE.EventDispatcher {
     }
 
     // --- Reset plate: small red steel disc beside the scoreboard ---
-    this.resetPlate = this.#buildResetPlate(new THREE.Vector3(-1.6, 0, -4.5));
+    this.resetPlate = this.#buildPlate(new THREE.Vector3(-1.6, 0, -4.5), { type: 'reset', color: 0xb3261e, name: 'resetPlate' });
+    // Shooting the black DUEL plate starts quick-draw duel mode (see DuelMode).
+    this.duelPlate = this.#buildPlate(new THREE.Vector3(-0.9, 0, -4.2), { type: 'duelStart', color: 0x1c1a18, name: 'duelPlate', label: 'DUEL' });
 
     for (const t of [...this.duelists, ...this.gongs]) this.staticColliders.push(...t.staticColliders);
-    this.targets = [...this.duelists, ...this.gongs, ...this.bottleGroups, this.resetPlate];
+    this.targets = [...this.duelists, ...this.gongs, ...this.bottleGroups, this.resetPlate, this.duelPlate];
 
     this.#registerPhysics();
 
@@ -164,6 +166,14 @@ export class TargetManager extends THREE.EventDispatcher {
   }
 
   #score(result, hit, shot, target) {
+    if (result.type === 'duelStart') {
+      this.sfx.steelPing(hit.point, 0.12);
+      this.text.spawn(hit.point, ['DUEL!'], '#ffd36b');
+      const report = { type: 'duelStart' };
+      this.dispatchEvent({ type: 'duelStart' });
+      this.dispatchEvent({ type: 'hit', report });
+      return report;
+    }
     if (result.type === 'reset') {
       this.resetStats();
       this.sfx.steelPing(hit.point, 0.12);
@@ -242,9 +252,12 @@ export class TargetManager extends THREE.EventDispatcher {
       this.stats.duelsMissed++;
       this.dirty = true;
       this.text.spawn(duelist.headPosition(), ['TOO SLOW'], '#ff8a6b');
+    } else if (outcome === 'retired') {
+      // Silent: the duel mode's outlaw going back down after firing.
     } else if (outcome === 'knocked') {
       this.text.spawn(duelist.headPosition(), ['KNOCKED OVER', 'no score'], '#ffe7b0');
     }
+    this.dispatchEvent({ type: 'duelResolved', duelist, outcome });
     if (this.duel.active === duelist) {
       this.duel.phase = 'wait';
       this.duel.active = null;
@@ -284,10 +297,10 @@ export class TargetManager extends THREE.EventDispatcher {
   #registerPhysics() {
     const P = this.physics;
     for (const m of [...this.scoreboard.colliders.slice(0, 2), ...this.propMeshes]) P.addStaticFromMesh(m);
-    P.addStaticFromMesh(this.resetPlate.post);
-    P.addStaticFromMesh(this.resetPlate.plate, {
-      onGunImpact: (speed, point) => this.sfx.steelPing(point, 0.12),
-    });
+    for (const pl of [this.resetPlate, this.duelPlate]) {
+      P.addStaticFromMesh(pl.post);
+      P.addStaticFromMesh(pl.plate, { onGunImpact: (speed, point) => this.sfx.steelPing(point, 0.12) });
+    }
 
     for (const d of this.duelists) {
       P.addStaticFromMesh(d.staticColliders[0]);
@@ -326,7 +339,12 @@ export class TargetManager extends THREE.EventDispatcher {
     }
   }
 
-  #buildResetPlate(position) {
+  /**
+   * A small steel plate on a post that triggers an action when shot.
+   * @param {THREE.Vector3} position
+   * @param {{ type: string, color: number, name: string, label?: string }} o
+   */
+  #buildPlate(position, { type, color, name, label = null }) {
     const group = new THREE.Group();
     group.position.copy(position);
     group.rotation.y = Math.atan2(FIRING_LINE.x - position.x, FIRING_LINE.z - position.z);
@@ -336,24 +354,32 @@ export class TargetManager extends THREE.EventDispatcher {
     post.userData.surface = 'wood';
     const plateGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.012, 24);
     plateGeo.rotateX(Math.PI / 2);
-    const plate = new THREE.Mesh(plateGeo, new THREE.MeshStandardMaterial({ color: 0xb3261e, metalness: 0.3, roughness: 0.5 }));
+    const plate = new THREE.Mesh(plateGeo, new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.5 }));
     plate.position.set(0, 1.0, 0.04);
     plate.castShadow = true;
     plate.userData.surface = 'steel';
-    plate.name = 'resetPlate';
+    plate.name = name;
     group.add(post, plate);
+    if (label) {
+      const tex = signTexture(label, { w: 256, h: 128, bg: '#00000000', fg: '#f3ead6', font: 'bold 78px Georgia, serif', border: false });
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.1), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+      sign.position.set(0, 1.0, 0.047);
+      sign.raycast = () => {};
+      group.add(sign);
+    }
     this.root.add(group);
     this.staticColliders.push(post);
 
     const target = {
-      type: 'reset',
+      type,
       plate,
       post,
       activeColliders: () => [plate],
-      onHit: () => ({ type: 'reset' }),
+      onHit: () => ({ type }),
       update: () => {},
     };
     plate.userData.target = target;
     return target;
   }
+
 }

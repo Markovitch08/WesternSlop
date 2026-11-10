@@ -46,10 +46,28 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | Steel gongs | 3 hanging plates at 13, 18 and 24 m (smaller plates further out). They ring and swing | 50 × precision (centre ring scores most) |
 | Glass bottles | 6 on a plank at 6 m, 3 on a crate at 19 m. They shatter and the row resets once it's cleared | 30 |
 | Red plate | Beside the scoreboard | Resets the score |
+| Black DUEL plate | Next to the red plate | Starts quick-draw duel mode (below) |
 
 Every score is multiplied by the distance factor 1 + distance / 15. The chalkboard on the left shows score,
 accuracy, headshots, duels won or missed, and best and average draw times. Each hit also shows a floating
 pop-up with points, zone, distance and reaction time.
+
+## Quick-draw duel mode
+
+Shoot the black **DUEL** plate to take on five outlaws in a row, each faster on the draw than the last
+(1.50, 1.25, 1.05, 0.90 and 0.80 s).
+
+1. **Holster.** The sign over the range shows the round and who you're facing. Holster your gun (load it first
+   if it's empty).
+2. **3 · 2 · 1.** A countdown with a knock on each beat, then a random pause so you can't time the draw.
+3. **DRAW!** The bell rings and the outlaw springs up. Draw from the holster and shoot him before he fires. Your
+   time runs from the signal to the hit.
+4. **Win or die.** Win and the sign shows your draw time and margin. Too slow and he fires back: his shot comes
+   from downrange, with muzzle smoke, a red flash and a hard rumble in both hands.
+
+Touching your gun before "DRAW!" is **JUMPED THE GUN**: holster again to restart the round. Losing a round ends
+the run with a summary of outlaws beaten and your best draw; beat all five to be the **FASTEST GUN** in the West.
+Random free-range pop-ups pause during a duel and come back afterwards.
 
 ## Test
 
@@ -64,7 +82,9 @@ checks zones, scores, duel timeouts, bottle respawns, surface impacts and the dr
 drops, rests, picks up and throws the gun (into bottles, gongs and duelists), tests recall and out-of-bounds
 return, and checks the sights both geometrically and by aiming with them and firing. The reload suite opens the
 cylinder, checks that the ejected cases are physics objects, loads from the pouch, closes with B and with a wrist
-flick, fires the reloaded rounds, and checks bullet drop, smoke, sparks and dust. Run one suite with
+flick, fires the reloaded rounds, and checks bullet drop, smoke, sparks and dust. The duel suite starts a duel from the plate,
+checks the holster prompt, countdown and foul, wins a round by drawing and shooting, loses the next by being
+too slow, and checks the summary and the return to free play. Run one suite with
 `npm test -- targets`. It needs the
 `playwright` package and a Chromium build available to Node.
 
@@ -86,6 +106,8 @@ flick, fires the reloaded rounds, and checks bullet drop, smoke, sparks and dust
 | `src/fx/ParticleFX.js` | One-draw-call particles: muzzle smoke and sparks, impact dust, steel sparks |
 | `src/fx/CasingFX.js` | Ejected brass cases as rigid bodies (instanced) |
 | `src/fx/ShardFX.js` | Instanced glass shards and wood splinters |
+| `src/game/DuelMode.js` | Quick-draw duel mode: round flow, countdown, fouls, outlaw ladder |
+| `src/ui/DuelHUD.js` | Duel sign over the range and the red hit flash |
 | `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |
 | `src/util/` | Procedural canvas textures, geometry helpers |
 

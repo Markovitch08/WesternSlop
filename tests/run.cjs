@@ -16,6 +16,7 @@ const SUITES = {
   targets: require('./suites/targets.cjs'),
   physics: require('./suites/physics.cjs'),
   reload: require('./suites/reload.cjs'),
+  duel: require('./suites/duel.cjs'),
 };
 
 (async () => {

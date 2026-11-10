@@ -175,6 +175,15 @@ export class Duelist {
     return true;
   }
 
+  /** Drop back down without a result (the duel mode's outlaw after he fires). */
+  retire() {
+    if (!this.isLive) return false;
+    this.state = 'falling';
+    this.angVel = -1;
+    this.onResolved?.(this, 'retired');
+    return true;
+  }
+
   /** @returns {object|null} scoring result, or null if not a live target */
   onHit(hit, shot, now) {
     if (!this.isLive) return null;

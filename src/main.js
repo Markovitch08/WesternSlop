@@ -12,6 +12,8 @@ import { PhysicsWorld } from './physics/PhysicsWorld.js';
 import { ParticleFX } from './fx/ParticleFX.js';
 import { CasingFX } from './fx/CasingFX.js';
 import { AmmoPouch } from './weapons/AmmoPouch.js';
+import { DuelHUD } from './ui/DuelHUD.js';
+import { DuelMode } from './game/DuelMode.js';
 import { TargetManager } from './targets/TargetManager.js';
 
 // ---------------------------------------------------------------------------
@@ -88,6 +90,9 @@ const revolver = new Revolver({
 const pouch = new AmmoPouch(scene, xr, sfx, () => revolver.roundsWanted, 'left');
 revolver.pouch = pouch;
 
+// Quick-draw duel mode: shoot the black DUEL plate to start.
+const duel = new DuelMode({ targets, revolver, sfx, xr, fx, camera, hud: new DuelHUD(scene, camera) });
+
 // Every shot is scored (accuracy), and reacts with the target or surface it hit.
 revolver.addEventListener('shot', (shot) => targets.handleShot(shot));
 
@@ -133,6 +138,7 @@ renderer.setAnimationLoop(() => {
   revolver.update(dt);
   casings.update(dt);
   fx.update(dt);
+  duel.update(dt);
   environment.update(dt);
   sfx.updateListener(camera);
   if (orbit.enabled) orbit.update();
@@ -141,4 +147,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel };
