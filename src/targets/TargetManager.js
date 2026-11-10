@@ -30,10 +30,12 @@ const SCORE_COLORS = { head: '#ff6b4a', heart: '#ffd36b', center: '#ffd36b' };
 export class TargetManager extends THREE.EventDispatcher {
   /**
    * @param {THREE.Scene} scene
-   * @param {{ sfx: import('../audio/SoundFX.js').SoundFX, camera: THREE.Camera }} deps
+   * @param {{ sfx: import('../audio/SoundFX.js').SoundFX, camera: THREE.Camera,
+   *   physics: import('../physics/PhysicsWorld.js').PhysicsWorld }} deps
    */
-  constructor(scene, { sfx, camera }) {
+  constructor(scene, { sfx, camera, physics }) {
     super();
+    this.physics = physics;
     this.scene = scene;
     this.sfx = sfx;
     this.camera = camera;
@@ -65,12 +67,14 @@ export class TargetManager extends THREE.EventDispatcher {
     // --- Bottles: a near row on a plank across two barrels, a far trio on a crate ---
     const wood = new THREE.MeshStandardMaterial({ map: plankTexture('#7a5232', 6), roughness: 0.85 });
     const barrelMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 });
+    this.propMeshes = [];
     const prop = (mesh, x, y, z) => {
       mesh.position.set(x, y, z);
       mesh.castShadow = mesh.receiveShadow = true;
       mesh.userData.surface = 'wood';
       this.root.add(mesh);
       this.staticColliders.push(mesh);
+      this.propMeshes.push(mesh);
       return mesh;
     };
     prop(new THREE.Mesh(barrelGeometry(), barrelMat), 1.85, 0, -5.5);
@@ -83,9 +87,10 @@ export class TargetManager extends THREE.EventDispatcher {
       new BottleGroup(this.root, [-0.2, 0, 0.2].map((dx) => new THREE.Vector3(-2.4 + dx, 0.6, -19))),
     ];
     for (const g of this.bottleGroups) {
-      g.onShatter = (point, color, dir) => {
+      g.onShatter = (point, color, dir, i) => {
         this.shards.burst(point, color, 16, dir, { speed: 2.2, size: 1, life: 2.5 });
         this.sfx.glassShatter(point);
+        if (g.bodies) g.bodies[i].collisionResponse = false; // the gun now passes through
       };
     }
 
@@ -94,6 +99,8 @@ export class TargetManager extends THREE.EventDispatcher {
 
     for (const t of [...this.duelists, ...this.gongs]) this.staticColliders.push(...t.staticColliders);
     this.targets = [...this.duelists, ...this.gongs, ...this.bottleGroups, this.resetPlate];
+
+    this.#registerPhysics();
 
     this.time = 0;
     this.duelEnabled = true;
@@ -225,6 +232,8 @@ export class TargetManager extends THREE.EventDispatcher {
       this.stats.duelsMissed++;
       this.dirty = true;
       this.text.spawn(duelist.headPosition(), ['TOO SLOW'], '#ff8a6b');
+    } else if (outcome === 'knocked') {
+      this.text.spawn(duelist.headPosition(), ['KNOCKED OVER', 'no score'], '#ffe7b0');
     }
     if (this.duel.active === duelist) {
       this.duel.phase = 'wait';
@@ -257,6 +266,56 @@ export class TargetManager extends THREE.EventDispatcher {
     }
   }
 
+  /**
+   * Give everything a dropped or thrown revolver can touch a physics body.
+   * Moving parts (gong plates, duelist boards) follow their meshes; bottles
+   * break when the gun hits them hard enough.
+   */
+  #registerPhysics() {
+    const P = this.physics;
+    for (const m of [...this.scoreboard.colliders.slice(0, 2), ...this.propMeshes]) P.addStaticFromMesh(m);
+    P.addStaticFromMesh(this.resetPlate.post);
+    P.addStaticFromMesh(this.resetPlate.plate, {
+      onGunImpact: (speed, point) => this.sfx.steelPing(point, 0.12),
+    });
+
+    for (const d of this.duelists) {
+      P.addStaticFromMesh(d.staticColliders[0]);
+      P.addFollower(d.board, {
+        onGunImpact: (speed) => {
+          if (speed > 1.2 && d.knock()) this.sfx.woodHit(d.headPosition());
+        },
+      });
+    }
+
+    const q = new THREE.Quaternion();
+    for (const g of this.gongs) {
+      g.object.updateWorldMatrix(true, false);
+      g.object.getWorldQuaternion(q);
+      for (const [c, h] of g.frameParts) P.addStaticBox(g.object.localToWorld(c.clone()), h, q);
+      P.addFollower(g.plate, {
+        onGunImpact: (speed, point) => {
+          if (speed < 0.6) return;
+          g.bump(speed);
+          this.sfx.steelPing(point, g.radius);
+        },
+      });
+    }
+
+    for (const group of this.bottleGroups) {
+      group.bodies = group.bottles.map((b, i) => {
+        const center = b.mesh.localToWorld(new THREE.Vector3(0, 0.15, 0));
+        return P.addStaticBox(center, new THREE.Vector3(0.035, 0.15, 0.035), null, {
+          surface: 'glass',
+          onGunImpact: (speed) => {
+            if (speed > 1.0) group.shatter(i);
+          },
+        });
+      });
+      group.onRespawn = () => group.bodies.forEach((body) => { body.collisionResponse = true; });
+    }
+  }
+
   #buildResetPlate(position) {
     const group = new THREE.Group();
     group.position.copy(position);
@@ -279,6 +338,7 @@ export class TargetManager extends THREE.EventDispatcher {
     const target = {
       type: 'reset',
       plate,
+      post,
       activeColliders: () => [plate],
       onHit: () => ({ type: 'reset' }),
       update: () => {},

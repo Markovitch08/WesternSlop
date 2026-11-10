@@ -32,11 +32,13 @@ export class Gong {
     const pivotY = PLATE_CENTER_Y + radius + CHAIN;
     const halfSpan = radius + 0.35;
     woodMaterial ??= new THREE.MeshStandardMaterial({ map: plankTexture('#5e3d24', 6), roughness: 0.85 });
-    const frame = new THREE.Mesh(merge([
-      place(worldBox(0.1, pivotY + 0.1, 0.1), -halfSpan, (pivotY + 0.1) / 2, 0),
-      place(worldBox(0.1, pivotY + 0.1, 0.1), halfSpan, (pivotY + 0.1) / 2, 0),
-      place(worldBox(halfSpan * 2 + 0.2, 0.1, 0.12), 0, pivotY + 0.05, 0),
-    ]), woodMaterial);
+    // Frame parts as [centre, half extents] in local space (also used for physics).
+    this.frameParts = [
+      [new THREE.Vector3(-halfSpan, (pivotY + 0.1) / 2, 0), new THREE.Vector3(0.05, (pivotY + 0.1) / 2, 0.05)],
+      [new THREE.Vector3(halfSpan, (pivotY + 0.1) / 2, 0), new THREE.Vector3(0.05, (pivotY + 0.1) / 2, 0.05)],
+      [new THREE.Vector3(0, pivotY + 0.05, 0), new THREE.Vector3(halfSpan + 0.1, 0.05, 0.06)],
+    ];
+    const frame = new THREE.Mesh(merge(this.frameParts.map(([c, h]) => place(worldBox(h.x * 2, h.y * 2, h.z * 2), c.x, c.y, c.z))), woodMaterial);
     frame.castShadow = frame.receiveShadow = true;
     frame.userData.surface = 'wood';
     this.object.add(frame);
@@ -73,6 +75,12 @@ export class Gong {
 
   activeColliders() {
     return [this.plate];
+  }
+
+  /** Knocked by something other than a bullet (a thrown revolver). */
+  bump(speed) {
+    this.swingVel += speed * 0.6;
+    this.twistVel += (Math.random() - 0.5) * speed;
   }
 
   onHit(hit, shot) {

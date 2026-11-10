@@ -23,13 +23,17 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 
 | Action | Input |
 | --- | --- |
-| Draw / hold the revolver | Hold the **grip** button with your hand at your right hip, where the holster is |
+| Draw / hold the revolver | Hold the **grip** button with your hand at your right hip, where the holster is. The gun only stays in your hand while you keep holding grip |
 | Swap hands | Squeeze the other hand's grip near the gun |
-| Holster | Let go of the grip: the gun returns to the holster (and is refilled until reloading lands in Pass 4) |
+| Holster | Let go of the grip with the gun at your hip (refills it until reloading lands in Pass 4) |
+| Drop / throw | Let go anywhere else: the gun is a rigid body, so it falls, clatters and keeps your hand's momentum. A thrown gun breaks bottles, rings gongs and knocks over duelists (no score) |
+| Pick up | Grip button near the gun, wherever it landed |
+| Recall | Click either **thumbstick** to bring a dropped gun back to the holster. A gun thrown out of the play area comes back on its own |
 | Cock the hammer | **A/B** (or **X/Y**), or pull the **thumbstick** back |
 | Fan the hammer | Hold the trigger and swipe your free hand fast across the hammer spur |
 | Fire (cocked) | Light trigger pull |
 | Fire (double action) | Full, heavy trigger pull: the hammer rises with the trigger and drops at the break |
+| Aim | Line the brass bead on the front blade up in the rear notch. The sights are zeroed at 15 m: hits land about 2 cm low up close and about 1 cm high at 25 m |
 
 ## The range
 
@@ -53,7 +57,9 @@ npm test
 This starts a Vite server and runs each suite in `tests/suites/` in a fresh headless Chromium page with fake XR
 controllers. The revolver suite covers grabbing, cocking, single and double action fire, dry fire, fanning, hand
 swaps and holstering. The targets suite fires real shots at gongs, duelists, bottles and the reset plate, and
-checks zones, scores, duel timeouts, bottle respawns, surface impacts and the draw-call budget. Run one suite with
+checks zones, scores, duel timeouts, bottle respawns, surface impacts and the draw-call budget. The physics suite
+drops, rests, picks up and throws the gun (into bottles, gongs and duelists), tests recall and out-of-bounds
+return, and checks the sights both geometrically and by aiming with them and firing. Run one suite with
 `npm test -- targets`. It needs the
 `playwright` package and a Chromium build available to Node.
 
@@ -70,6 +76,7 @@ checks zones, scores, duel timeouts, bottle respawns, surface impacts and the dr
 | `src/fx/ImpactFX.js` | Pooled bullet-hole decals |
 | `src/targets/TargetManager.js` | Duel scheduler, scoring, shot routing, score UI |
 | `src/targets/Duelist.js`, `Gong.js`, `BottleGroup.js` | Target types: hit zones, reactions, physics |
+| `src/physics/PhysicsWorld.js` | cannon-es world: static props, kinematic followers for moving targets, the revolver's rigid body |
 | `src/fx/ShardFX.js` | Instanced glass shards and wood splinters |
 | `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |
 | `src/util/` | Procedural canvas textures, geometry helpers |

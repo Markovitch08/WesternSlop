@@ -166,6 +166,15 @@ export class Duelist {
     return true;
   }
 
+  /** Knocked over by something other than a bullet (a thrown revolver). */
+  knock() {
+    if (!this.isLive) return false;
+    this.state = 'falling';
+    this.angVel = -3;
+    this.onResolved?.(this, 'knocked');
+    return true;
+  }
+
   /** @returns {object|null} scoring result, or null if not a live target */
   onHit(hit, shot, now) {
     if (!this.isLive) return null;

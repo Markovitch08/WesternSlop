@@ -56,8 +56,10 @@ export class BottleGroup {
     });
     this.respawnTimer = 0;
     this.staticColliders = [];
-    /** Set by TargetManager: (point, color, direction) => void */
+    /** Set by TargetManager: (point, color, direction, index) => void */
     this.onShatter = null;
+    /** Set by TargetManager: called when the row is restored. */
+    this.onRespawn = null;
   }
 
   activeColliders() {
@@ -75,7 +77,7 @@ export class BottleGroup {
     b.broken = true;
     b.mesh.visible = false;
     const center = b.mesh.localToWorld(new THREE.Vector3(0, 0.15, 0));
-    this.onShatter?.(center, b.color, direction);
+    this.onShatter?.(center, b.color, direction, i);
     if (this.remaining === 0) this.respawnTimer = RESPAWN_DELAY;
     return true;
   }
@@ -94,6 +96,7 @@ export class BottleGroup {
         b.broken = false;
         b.mesh.visible = true;
       }
+      this.onRespawn?.();
     }
   }
 }

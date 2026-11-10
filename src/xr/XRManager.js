@@ -15,7 +15,12 @@ export const BUTTON = Object.freeze({
 });
 
 const BUTTON_COUNT = 6;
+const THROW_WINDOW = 5; // frames averaged for throw velocity (~70 ms at 72 Hz)
 const _tmpMatrix = new THREE.Matrix4();
+const _tmpScale = new THREE.Vector3();
+const _tmpQuat = new THREE.Quaternion();
+const _tmpVec = new THREE.Vector3();
+const _dq = new THREE.Quaternion();
 
 /**
  * Per-hand state: the three.js controller spaces, the WebXR input source,
@@ -46,6 +51,19 @@ class Hand {
     this.velocity = new THREE.Vector3();
     this._prevPosition = new THREE.Vector3();
     this._hasPrev = false;
+    /**
+     * Mean grip velocity over the last THROW_WINDOW frames: what a released
+     * object is thrown with. A fixed window (not exponential smoothing) means a
+     * hand held still for a few frames throws with exactly zero velocity.
+     */
+    this.throwVelocity = new THREE.Vector3();
+    /** Grip angular velocity, rad/s (axis * speed), averaged the same way. */
+    this.angularVelocity = new THREE.Vector3();
+    this._velHistory = Array.from({ length: THROW_WINDOW }, () => new THREE.Vector3());
+    this._angHistory = Array.from({ length: THROW_WINDOW }, () => new THREE.Vector3());
+    this._histIndex = 0;
+    this.quaternion = new THREE.Quaternion();
+    this._prevQuaternion = new THREE.Quaternion();
   }
 
   get gamepad() {
@@ -116,6 +134,7 @@ export class XRManager extends THREE.EventDispatcher {
         hand.connected = false;
         hand.inputSource = null;
         hand._hasPrev = false;
+        for (const v of [...hand._velHistory, ...hand._angHistory]) v.set(0, 0, 0);
         hand.reset();
         this.dispatchEvent({ type: 'disconnected', hand });
       });
@@ -154,13 +173,33 @@ export class XRManager extends THREE.EventDispatcher {
       if (hand.connected) {
         hand.poll();
         hand.grip.updateWorldMatrix(true, false);
-        hand.position.setFromMatrixPosition(hand.grip.matrixWorld);
+        hand.grip.matrixWorld.decompose(hand.position, hand.quaternion, _tmpScale);
         if (hand._hasPrev && dt > 0) {
           hand.velocity.subVectors(hand.position, hand._prevPosition).divideScalar(dt);
+          // Angular velocity from the frame-to-frame rotation delta.
+          _dq.copy(hand.quaternion).multiply(_tmpQuat.copy(hand._prevQuaternion).invert());
+          if (_dq.w < 0) _dq.set(-_dq.x, -_dq.y, -_dq.z, -_dq.w);
+          const angle = 2 * Math.acos(Math.min(1, _dq.w));
+          const sinHalf = Math.sqrt(Math.max(0, 1 - _dq.w * _dq.w));
+          if (sinHalf > 1e-6) _tmpVec.set(_dq.x / sinHalf, _dq.y / sinHalf, _dq.z / sinHalf).multiplyScalar(angle / dt);
+          else _tmpVec.set(0, 0, 0);
         } else {
           hand.velocity.set(0, 0, 0);
+          _tmpVec.set(0, 0, 0);
         }
+        hand._velHistory[hand._histIndex].copy(hand.velocity);
+        hand._angHistory[hand._histIndex].copy(_tmpVec);
+        hand._histIndex = (hand._histIndex + 1) % THROW_WINDOW;
+        hand.throwVelocity.set(0, 0, 0);
+        hand.angularVelocity.set(0, 0, 0);
+        for (let k = 0; k < THROW_WINDOW; k++) {
+          hand.throwVelocity.add(hand._velHistory[k]);
+          hand.angularVelocity.add(hand._angHistory[k]);
+        }
+        hand.throwVelocity.divideScalar(THROW_WINDOW);
+        hand.angularVelocity.divideScalar(THROW_WINDOW);
         hand._prevPosition.copy(hand.position);
+        hand._prevQuaternion.copy(hand.quaternion);
         hand._hasPrev = true;
       }
       // Hide the pointer ray and controller model while something is held.

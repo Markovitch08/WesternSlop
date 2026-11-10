@@ -14,10 +14,16 @@ import { worldBox, place, tint, merge, barrelGeometry } from './util/geometry.js
  * Draw-call budget matters on Quest: static props are merged per material or
  * instanced.
  *
+ * Solid props are also registered as static boxes in the physics world, so a
+ * dropped or thrown revolver lands on them.
+ *
  * @param {THREE.Scene} scene
  * @param {THREE.WebGLRenderer} renderer
+ * @param {import('./physics/PhysicsWorld.js').PhysicsWorld} physics
  */
-export function createEnvironment(scene, renderer) {
+export function createEnvironment(scene, renderer, physics) {
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const yawQ = (ry) => new THREE.Quaternion().setFromAxisAngle(THREE.Object3D.DEFAULT_UP, ry);
   const colliders = [];
   const solid = (mesh, surface, { cast = true, receive = true } = {}) => {
     mesh.castShadow = cast;
@@ -75,6 +81,7 @@ export function createEnvironment(scene, renderer) {
   bench.position.set(0, 0.45, -0.8);
   bench.name = 'bench';
   solid(bench, 'wood');
+  physics.addStaticFromMesh(bench);
 
   // Saloon at the end of the range.
   const saloon = buildSaloon(wallMat, trimMat);
@@ -87,12 +94,24 @@ export function createEnvironment(scene, renderer) {
       colliders.push(o);
     }
   });
+  physics.addStaticBox(V(0, 2.5, -32), V(6, 2.5, 0.15)); // front wall
+  physics.addStaticBox(V(0, 6.2, -32), V(4, 1.2, 0.15)); // false front
+  physics.addStaticBox(V(0, 0.12, -30.4), V(6.2, 0.125, 1.6)); // porch floor
+  physics.addStaticBox(V(0, 1.0, -28.95), V(6.2, 0.06, 0.04)); // hitching rail
+  for (const x of [-6, -3, 3, 6]) physics.addStaticBox(V(x, 1.75, -28.95), V(0.09, 1.65, 0.09));
+  for (const x of [-6, 6]) physics.addStaticBox(V(x, 2.5, -36), V(0.15, 2.5, 4));
 
   // Fences down both sides of the range.
   const fenceGeos = [];
   for (const x of [-9, 9]) {
-    for (let z = 2; z >= -26; z -= 2.5) fenceGeos.push(place(worldBox(0.12, 1.2, 0.12), x, 0.6, z));
-    for (const y of [0.45, 0.95]) fenceGeos.push(place(worldBox(0.05, 0.1, 28.5), x, y, -12));
+    for (let z = 2; z >= -26; z -= 2.5) {
+      fenceGeos.push(place(worldBox(0.12, 1.2, 0.12), x, 0.6, z));
+      physics.addStaticBox(V(x, 0.6, z), V(0.06, 0.6, 0.06));
+    }
+    for (const y of [0.45, 0.95]) {
+      fenceGeos.push(place(worldBox(0.05, 0.1, 28.5), x, y, -12));
+      physics.addStaticBox(V(x, y, -12), V(0.025, 0.05, 14.25));
+    }
   }
   solid(new THREE.Mesh(merge(fenceGeos), trimMat), 'wood').name = 'fence';
 
@@ -110,15 +129,15 @@ export function createEnvironment(scene, renderer) {
     new THREE.Vector3(x, 0, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), new THREE.Vector3(1, 1, 1),
   )));
   barrels.computeBoundingSphere();
+  for (const [x, z, ry] of barrelSpots) physics.addStaticBox(V(x, 0.425, z), V(0.29, 0.425, 0.29), yawQ(ry));
   barrels.name = 'barrels';
   solid(barrels, 'wood');
 
   // Saguaro cacti (merged).
+  const cactusSpots = [[-11, -9, 0.2, 1.0], [12, -15, 1.4, 1.2], [-13, -22, 2.5, 0.9], [-24, -40, 1.0, 1.4], [20, -45, 0.6, 1.3], [14, 4, 2.2, 0.8]];
+  for (const [x, z, , sc] of cactusSpots) physics.addStaticBox(V(x, 1.82 * sc, z), V(0.2 * sc, 1.82 * sc, 0.2 * sc), null, { surface: 'plant' });
   const cacti = new THREE.Mesh(
-    merge([
-      saguaro(-11, -9, 0.2, 1.0), saguaro(12, -15, 1.4, 1.2), saguaro(-13, -22, 2.5, 0.9),
-      saguaro(-24, -40, 1.0, 1.4), saguaro(20, -45, 0.6, 1.3), saguaro(14, 4, 2.2, 0.8),
-    ]),
+    merge(cactusSpots.map(([x, z, rot, sc]) => saguaro(x, z, rot, sc))),
     new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 }),
   );
   cacti.name = 'cacti';
@@ -129,6 +148,7 @@ export function createEnvironment(scene, renderer) {
     const post = new THREE.Mesh(worldBox(0.08, 1.0, 0.08), trimMat);
     post.position.set(-8.4, 0.5, -d);
     solid(post, 'wood');
+    physics.addStaticFromMesh(post);
     const sign = new THREE.Mesh(
       new THREE.PlaneGeometry(0.6, 0.3),
       new THREE.MeshStandardMaterial({ map: signTexture(`${d} m`, { w: 256, h: 128, font: 'bold 64px Georgia, serif' }), roughness: 0.9 }),

@@ -10,7 +10,10 @@ module.exports = async function targetsSuite() {
   tm.duelEnabled = false;
 
   const out = [];
-  const check = (name, ok, detail = '') => out.push({ name, ok: !!ok, detail: String(detail) });
+  const check = (name, ok, detail = '') => {
+    out.push({ name, ok: !!ok, detail: String(detail) });
+    console.log(`[check] ${ok ? 'ok ' : 'BAD'} ${name} ${detail}`);
+  };
   const frames = (n) => new Promise((res) => {
     let i = 0;
     const tick = () => (++i >= n ? res() : requestAnimationFrame(tick));

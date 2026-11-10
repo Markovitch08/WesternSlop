@@ -95,14 +95,17 @@ export class SoundFX {
   #build() {
     const ctx = this.ctx;
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -10;
-    comp.ratio.value = 6;
+    comp.threshold.value = -8;
+    comp.knee.value = 12;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.004;
+    comp.release.value = 0.3;
     this.master = ctx.createGain();
     this.master.gain.value = 0.9;
     this.master.connect(comp).connect(ctx.destination);
 
-    // One second of white noise, reused by every effect.
-    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    // Two seconds of white noise, reused by every effect.
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     this.noise = buf;
@@ -118,6 +121,52 @@ export class SoundFX {
     delay.connect(lp).connect(fb).connect(delay);
     lp.connect(this.master);
     this.echo = delay;
+
+    // Open-desert reverb: a generated impulse response (decaying filtered noise
+    // with a few early reflections off the saloon and mesas).
+    const conv = ctx.createConvolver();
+    conv.buffer = this.#impulseResponse(2.6);
+    const verbLp = ctx.createBiquadFilter();
+    verbLp.type = 'lowpass';
+    verbLp.frequency.value = 2200;
+    const verbOut = ctx.createGain();
+    verbOut.gain.value = 0.45;
+    conv.connect(verbLp).connect(verbOut).connect(this.master);
+    this.reverb = conv;
+
+    // Soft clipper for the gunshot bus: adds weight and punch to the boom.
+    const shaper = ctx.createWaveShaper();
+    const n = 2048;
+    const curve = new Float32Array(n);
+    const k = 2.2;
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.tanh(k * x) / Math.tanh(k);
+    }
+    shaper.curve = curve;
+    shaper.oversample = '2x';
+    this.shotShaper = shaper;
+  }
+
+  #impulseResponse(seconds) {
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    const reflections = [[0.045, 0.5], [0.11, 0.35], [0.19, 0.3], [0.33, 0.22]];
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const t = i / ctx.sampleRate;
+        lp += 0.35 * ((Math.random() * 2 - 1) - lp); // gentle low-pass on the tail
+        d[i] = lp * Math.exp(-t / 0.55) * 0.9;
+      }
+      for (const [t, g] of reflections) {
+        const i = Math.floor((t + ch * 0.007) * ctx.sampleRate);
+        for (let j = 0; j < 200 && i + j < len; j++) d[i + j] += (Math.random() * 2 - 1) * g * Math.exp(-j / 60);
+      }
+    }
+    return buf;
   }
 
   #noiseBurst(t, dur, filterType, freqStart, freqEnd, gain, dest = this.master) {
@@ -150,18 +199,47 @@ export class SoundFX {
     o.stop(t + dur + 0.02);
   }
 
-  /** Black-powder revolver report: sharp crack, body thump, echo tail. */
+  /**
+   * Black-powder revolver report: a supersonic crack, a long dark blast, a
+   * sub-bass boom you feel in the chest, soft-clipped for weight, then the
+   * desert answers with reverb and a slap-back echo off the mesas.
+   */
   gunshot() {
     this.#count('gunshot');
     if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    const bus = this.ctx.createGain();
-    bus.gain.value = 1;
-    bus.connect(this.master);
-    bus.connect(this.echo);
-    this.#noiseBurst(t, 0.05, 'highpass', 2500, 1500, 1.0, bus); // crack
-    this.#noiseBurst(t, 0.45, 'lowpass', 5000, 250, 0.9, bus); // blast body
-    this.#tone(t, 0.18, 'sine', 140, 38, 0.9, bus); // chest thump
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const bus = ctx.createGain();
+    bus.gain.value = 0.9;
+    const post = ctx.createGain();
+    post.gain.value = 0.85;
+    bus.connect(this.shotShaper).connect(post).connect(this.master);
+    const sends = ctx.createGain();
+    sends.gain.value = 0.7;
+    post.connect(sends);
+    sends.connect(this.reverb);
+    sends.connect(this.echo);
+
+    this.#noiseBurst(t, 0.04, 'highpass', 3000, 1800, 0.9, bus); // crack
+    this.#noiseBurst(t, 0.22, 'bandpass', 900, 220, 1.0, bus); // mid punch
+    this.#noiseBurst(t, 0.9, 'lowpass', 3500, 90, 1.2, bus); // long blast body
+    this.#tone(t, 0.6, 'sine', 95, 32, 1.4, bus); // sub boom
+    this.#tone(t, 1.0, 'sine', 58, 26, 1.0, bus); // low rumble
+    this.#tone(t, 0.12, 'triangle', 180, 60, 0.6, bus); // chest thump attack
+  }
+
+  /** Revolver landing on something: steel clank plus the surface's own thud. */
+  gunClatter(position, surface, speed) {
+    this.#count('clatter');
+    if (!this.ctx) return;
+    const level = Math.min(1, speed / 4);
+    const { dest, t } = this.#spatial(position, 0.4 + level * 0.8);
+    const f = 900 + Math.random() * 300;
+    this.#tone(t, 0.18, 'triangle', f, f * 0.97, 0.35, dest);
+    this.#tone(t, 0.12, 'sine', f * 2.7, f * 2.6, 0.18, dest);
+    this.#noiseBurst(t, 0.04, 'highpass', 3500, 2500, 0.4, dest);
+    if (surface === 'sand') this.#noiseBurst(t, 0.12, 'lowpass', 500, 120, 0.6, dest);
+    else if (surface === 'wood') this.#noiseBurst(t, 0.08, 'bandpass', 900, 400, 0.6, dest);
   }
 
   /** Metallic click: hammer cock, dry fire, cylinder detent. */

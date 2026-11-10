@@ -167,8 +167,12 @@ module.exports = async function revolverSuite() {
 
   // --- Release -> holster -----------------------------------------------------
   rev.chambers.fill('spent');
+  // Carry the gun to the hip, then let go: it slides into the holster.
+  const hip = holster.socket.getWorldPosition(holster.socket.position.clone());
+  pose(L, hip.x, hip.y, hip.z);
+  await frames(3);
   xr.dispatchEvent({ type: 'squeezeend', hand: L });
-  check('release starts return', rev.state === 'returning' && L.held === null);
+  check('release at the hip starts holstering', rev.state === 'holstering' && L.held === null, rev.state);
   await frames(30);
   check('returns to holster', rev.state === 'holstered' && rev.object.parent === holster.socket);
   check('holster refills cylinder', rev.chambers.every((c) => c === 'live'));

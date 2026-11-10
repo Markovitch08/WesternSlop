@@ -6,6 +6,7 @@
  *
  * Run: npm test   (needs the `playwright` package and a Chromium build)
  *      npm test -- targets   (run only suites whose name matches)
+ *      VERBOSE=1 npm test    (stream each check as it runs)
  */
 const path = require('node:path');
 const { chromium } = require('playwright');
@@ -13,6 +14,7 @@ const { chromium } = require('playwright');
 const SUITES = {
   revolver: require('./suites/revolver.cjs'),
   targets: require('./suites/targets.cjs'),
+  physics: require('./suites/physics.cjs'),
 };
 
 (async () => {
@@ -36,7 +38,10 @@ const SUITES = {
       const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
       const pageErrors = [];
       page.on('pageerror', (e) => pageErrors.push(e.message));
-      page.on('console', (m) => { if (m.type() === 'error') pageErrors.push(m.text()); });
+      page.on('console', (m) => {
+        if (m.type() === 'error') pageErrors.push(m.text());
+        else if (process.env.VERBOSE && m.text().startsWith('[check]')) console.log('   ', m.text());
+      });
       await page.goto(url);
       await page.waitForFunction(() => window.__game);
 
