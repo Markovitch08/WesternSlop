@@ -23,8 +23,8 @@ import { CANNON } from '../physics/PhysicsWorld.js';
  *   - Grab cartridges from the pouch on the left hip with the free hand and
  *     hold them at the open cylinder: they feed into the empty chambers one
  *     at a time, in firing order.
- *   - B/Y again closes it, or flick the wrist (fast roll) to snap it shut with
- *     a free spin; after a spin the chamber that ends up under the hammer is
+ *   - B/Y again closes it, or push it back into the frame with the empty free
+ *     hand, or flick the wrist (fast roll) to snap it shut with a free spin; after a spin the chamber that ends up under the hammer is
  *     wherever the cylinder stopped.
  *
  * Holding: the gun stays in your hand only while the grip button is held.
@@ -110,8 +110,10 @@ const RECOIL_KICK_YAW = 2.5; // rad/s, random sideways
 // Cylinder crane and reloading.
 const CRANE_OPEN_ANGLE = 1.6; // rad, swung out to the left
 const EJECT_DELAY = 0.12; // s after opening before casings drop out
-const FEED_INTERVAL = 0.18; // s per round fed from the hand
-const FEED_RADIUS = 0.09; // metres, hand -> open cylinder
+const FEED_INTERVAL = 0.07; // s per round fed from the hand (six in ~0.4 s)
+const FEED_RADIUS = 0.12; // metres, hand -> open cylinder
+const PUSH_RADIUS = 0.1; // metres, empty free hand -> open cylinder to push it shut
+const PUSH_SPEED = 0.35; // m/s toward the frame that counts as a push
 const FLICK_ROLL_RATE = 9; // rad/s of wrist roll that snaps the cylinder shut
 const SPIN_START = 26; // rad/s free spin after a flick close
 const CHAMBER_R = 0.012;
@@ -716,12 +718,38 @@ export class Revolver extends THREE.EventDispatcher {
       }
     }
 
+    // The empty free hand pushes the cylinder back into the frame. Uses this
+    // frame's hand velocity (not the throw average) so a hand that has just
+    // arrived from the pouch doesn't count as a push.
+    if (this.openTime > 0.25 && this.cylinderOpen) {
+      const pusher = this.xr.hands.find((h) => h !== this.hand && h.connected && h.held === null);
+      if (pusher) {
+        this.cylinder.getWorldPosition(_v1);
+        if (pusher.position.distanceTo(_v1) < PUSH_RADIUS) {
+          const toFrame = this.#closedCylinderWorld(_v2).sub(_v1).normalize();
+          if (pusher.velocity.dot(toFrame) > PUSH_SPEED) {
+            this.closeCylinder(false);
+            this.xr.pulse(pusher, 0.4, 25);
+            this.dispatchEvent({ type: 'cylinderPushed' });
+            return;
+          }
+        }
+      }
+    }
+
     // A sharp roll of the wrist snaps the cylinder shut.
     if (this.openTime > 0.25) {
       this.object.getWorldQuaternion(_q1);
       const axis = _v2.set(0, 0, -1).applyQuaternion(_q1);
       if (Math.abs(this.hand.angularVelocity.dot(axis)) > FLICK_ROLL_RATE) this.closeCylinder(true);
     }
+  }
+
+  /** Where the cylinder sits when closed (crane swung in), in world space. */
+  #closedCylinderWorld(target) {
+    target.copy(this.crane.position).add(this.cylinder.position);
+    this.recoilPivot.updateWorldMatrix(true, false);
+    return this.recoilPivot.localToWorld(target);
   }
 
   /** Free spin after a flick close: ratchets past each chamber, then settles. */

@@ -31,7 +31,8 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | Recall | Click either **thumbstick** to bring a dropped gun back to the holster. A gun thrown out of the play area comes back on its own |
 | Cock the hammer | **A** (or **X**), or pull the **thumbstick** back |
 | Open / close the cylinder | **B** (or **Y**). Spent cases drop out as soon as it swings open |
-| Load | With the cylinder open, squeeze grip with your free hand at the **pouch on your left hip** to take a palmful of cartridges, then hold them at the cylinder: they feed in one at a time |
+| Load | With the cylinder open, squeeze grip with your free hand at the **pouch on your left hip** to take a palmful of cartridges, then hold them at the cylinder: they feed in quickly (a full six in under half a second) |
+| Push it shut | Once your free hand is empty, sweep it into the swung-out cylinder toward the frame to push it home |
 | Flick it shut | Snap your wrist (a fast roll) with the cylinder open: it closes and spins free. Wherever it stops is the chamber under the hammer |
 | Fan the hammer | Hold the trigger and swipe your free hand fast across the hammer spur |
 | Fire (cocked) | Light trigger pull |
@@ -101,8 +102,8 @@ swaps and holstering. The targets suite fires real shots at gongs, duelists, bot
 checks zones, scores, duel timeouts, bottle respawns, surface impacts and the draw-call budget. The physics suite
 drops, rests, picks up and throws the gun (into bottles, gongs and duelists), tests recall and out-of-bounds
 return, and checks the sights both geometrically and by aiming with them and firing. The reload suite opens the
-cylinder, checks that the ejected cases are physics objects, loads from the pouch, closes with B and with a wrist
-flick, fires the reloaded rounds, and checks bullet drop, smoke, sparks and dust. The duel suite starts a duel from the plate,
+cylinder, checks that the ejected cases are physics objects, loads from the pouch, pushes it shut with the free hand,
+closes with B and with a wrist flick, fires the reloaded rounds, and checks bullet drop, smoke, sparks and dust. The duel suite starts a duel from the plate,
 checks the holster prompt, countdown and foul, wins a round by drawing and shooting, loses the next by being
 too slow, and checks the summary and the return to free play. The atmosphere suite checks the light, fog and sky, dust and wind,
 tumbleweeds, lanterns, and the audio system (unlock, listener, ambient layers, echoes, positional effects).

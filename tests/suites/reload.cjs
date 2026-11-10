@@ -123,13 +123,34 @@ module.exports = async function reloadSuite() {
   await frames(2);
   check('hand empty after the last round', L.held === null);
   check('loaded chambers show live case heads', rev.caseHeads.every((h) => h.head.visible && h.head.material === rev.caseMaterials.live));
+
+  // --- Push the cylinder home with the free hand -------------------------------------
+  await frames(8);
+  check('an empty hand resting at the cylinder leaves it open', rev.cylinderOpen);
+  const openPos = rev.cylinder.getWorldPosition(V(0, 0, 0));
+  const closedPos = rev.recoilPivot.localToWorld(rev.crane.position.clone().add(rev.cylinder.position));
+  const toFrame = closedPos.clone().sub(openPos).normalize();
+  const closes0 = played('cylinderClose');
+  const pushPulses = pulses.length;
+  for (let i = 1; i <= 4 && rev.cylinderOpen; i++) {
+    pose(L, openPos.clone().addScaledVector(toFrame, i * 0.025));
+    await frames(1);
+  }
+  check('free hand pushes the cylinder back into the frame', !rev.cylinderOpen && played('cylinderClose') === closes0 + 1);
+  check('push gives haptics in both hands', new Set(pulses.slice(pushPulses).map((p) => p.handedness)).size === 2);
+  await frames(8);
+  check('crane swung back in after the push', rev.crane.rotation.z < 0.1, rev.crane.rotation.z.toFixed(2));
   xr.dispatchEvent({ type: 'squeezeend', hand: L });
   pose(L, LEFT_REST);
   await frames(3);
 
   // --- Close with B and fire the reloaded rounds in order --------------------------
   await press(rgp, 5);
-  check('B closes the cylinder', !rev.cylinderOpen && played('cylinderClose') === 1);
+  check('B opens it again', rev.cylinderOpen);
+  await frames(10);
+  const closes1 = played('cylinderClose');
+  await press(rgp, 5);
+  check('B closes the cylinder', !rev.cylinderOpen && played('cylinderClose') === closes1 + 1);
   await frames(8);
   check('crane back in', rev.crane.rotation.z < 0.1, rev.crane.rotation.z.toFixed(2));
   let fired = 0;
@@ -147,8 +168,10 @@ module.exports = async function reloadSuite() {
   await frames(3);
   xr.dispatchEvent({ type: 'squeezestart', hand: L });
   check('a palmful of six', L.held?.count === 6, L.held?.count);
+  const t0 = tm.time;
   pose(L, rev.cylinder.getWorldPosition(V(0, 0, 0)));
   check('six rounds fed', await until(() => rev.chambers.every((c) => c === 'live'), 240), rev.chambers.join(','));
+  check('a full reload feeds quickly (< 0.6 s)', tm.time - t0 < 0.6, `${(tm.time - t0).toFixed(2)} s`);
   xr.dispatchEvent({ type: 'squeezeend', hand: L });
   pose(L, LEFT_REST);
   await frames(12); // past the minimum open time
