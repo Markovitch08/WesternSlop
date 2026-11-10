@@ -175,7 +175,7 @@ module.exports = async function revolverSuite() {
   check('release at the hip starts holstering', rev.state === 'holstering' && L.held === null, rev.state);
   await frames(30);
   check('returns to holster', rev.state === 'holstered' && rev.object.parent === holster.socket);
-  check('holster refills cylinder', rev.chambers.every((c) => c === 'live'));
+  check('holstering does not refill (reload by hand)', rev.chambers.every((c) => c === 'spent'), rev.chambers.join(','));
   check('snapped into socket', rev.object.position.length() < 1e-3);
   return out;
 };

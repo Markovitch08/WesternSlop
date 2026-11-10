@@ -25,15 +25,18 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | --- | --- |
 | Draw / hold the revolver | Hold the **grip** button with your hand at your right hip, where the holster is. The gun only stays in your hand while you keep holding grip |
 | Swap hands | Squeeze the other hand's grip near the gun |
-| Holster | Let go of the grip with the gun at your hip (refills it until reloading lands in Pass 4) |
+| Holster | Let go of the grip with the gun at your hip |
 | Drop / throw | Let go anywhere else: the gun is a rigid body, so it falls, clatters and keeps your hand's momentum. A thrown gun breaks bottles, rings gongs and knocks over duelists (no score) |
 | Pick up | Grip button near the gun, wherever it landed |
 | Recall | Click either **thumbstick** to bring a dropped gun back to the holster. A gun thrown out of the play area comes back on its own |
-| Cock the hammer | **A/B** (or **X/Y**), or pull the **thumbstick** back |
+| Cock the hammer | **A** (or **X**), or pull the **thumbstick** back |
+| Open / close the cylinder | **B** (or **Y**). Spent cases drop out as soon as it swings open |
+| Load | With the cylinder open, squeeze grip with your free hand at the **pouch on your left hip** to take a palmful of cartridges, then hold them at the cylinder: they feed in one at a time |
+| Flick it shut | Snap your wrist (a fast roll) with the cylinder open: it closes and spins free. Wherever it stops is the chamber under the hammer |
 | Fan the hammer | Hold the trigger and swipe your free hand fast across the hammer spur |
 | Fire (cocked) | Light trigger pull |
 | Fire (double action) | Full, heavy trigger pull: the hammer rises with the trigger and drops at the break |
-| Aim | Line the brass bead on the front blade up in the rear notch. The sights are zeroed at 15 m: hits land about 2 cm low up close and about 1 cm high at 25 m |
+| Aim | Line the brass bead on the front blade up in the rear notch. Bullets fly at 260 m/s and drop under gravity; the sights are zeroed at 15 m (about 2 cm low up close, about 1.5 cm low at 25 m) |
 
 ## The range
 
@@ -59,7 +62,9 @@ controllers. The revolver suite covers grabbing, cocking, single and double acti
 swaps and holstering. The targets suite fires real shots at gongs, duelists, bottles and the reset plate, and
 checks zones, scores, duel timeouts, bottle respawns, surface impacts and the draw-call budget. The physics suite
 drops, rests, picks up and throws the gun (into bottles, gongs and duelists), tests recall and out-of-bounds
-return, and checks the sights both geometrically and by aiming with them and firing. Run one suite with
+return, and checks the sights both geometrically and by aiming with them and firing. The reload suite opens the
+cylinder, checks that the ejected cases are physics objects, loads from the pouch, closes with B and with a wrist
+flick, fires the reloaded rounds, and checks bullet drop, smoke, sparks and dust. Run one suite with
 `npm test -- targets`. It needs the
 `playwright` package and a Chromium build available to Node.
 
@@ -72,11 +77,14 @@ return, and checks the sights both geometrically and by aiming with them and fir
 | `src/xr/XRManager.js` | Controller tracking and models, button polling with edge detection, raycasting, haptics |
 | `src/weapons/Revolver.js` | Revolver model, grip snapping, hammer/trigger/cylinder logic, raycast fire, recoil, flash, haptics |
 | `src/weapons/Holster.js` | Hip holster that follows the player's body |
-| `src/audio/SoundFX.js` | Web Audio synth: gunshot with echo, clicks, and positional steel, wood, glass, sand and bell sounds |
+| `src/audio/SoundFX.js` | Web Audio synth: gunshot with outdoor echoes, reload sounds, brass, and positional steel, wood, glass, sand and bell sounds |
 | `src/fx/ImpactFX.js` | Pooled bullet-hole decals |
 | `src/targets/TargetManager.js` | Duel scheduler, scoring, shot routing, score UI |
 | `src/targets/Duelist.js`, `Gong.js`, `BottleGroup.js` | Target types: hit zones, reactions, physics |
 | `src/physics/PhysicsWorld.js` | cannon-es world: static props, kinematic followers for moving targets, the revolver's rigid body |
+| `src/weapons/AmmoPouch.js` | Hip cartridge pouch and the rounds held in the free hand |
+| `src/fx/ParticleFX.js` | One-draw-call particles: muzzle smoke and sparks, impact dust, steel sparks |
+| `src/fx/CasingFX.js` | Ejected brass cases as rigid bodies (instanced) |
 | `src/fx/ShardFX.js` | Instanced glass shards and wood splinters |
 | `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |
 | `src/util/` | Procedural canvas textures, geometry helpers |
@@ -86,4 +94,4 @@ return, and checks the sights both geometrically and by aiming with them and fir
 1. ✅ Vite + Three.js scaffold, WebXR session, controller models
 2. ✅ Revolver: grip attachment, trigger and hammer, raycast fire, haptics
 3. ✅ Environment and targets: saloon, gongs, bottles, pop-ups, 3D scoreboard
-4. Cylinder load and eject, recoil interpolation, sparks and smoke
+4. ✅ Cylinder load and eject, recoil interpolation, sparks and smoke

@@ -21,7 +21,7 @@ export class SoundFX {
     this.ctx = null;
     this.master = null;
     this.noise = null;
-    this.echo = null;
+    this.outdoor = null;
     this.listenerPos = new THREE.Vector3();
     /** Counts of each sound played; handy for tests and debugging. */
     this.played = {};
@@ -110,29 +110,26 @@ export class SoundFX {
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     this.noise = buf;
 
-    // Desert slap-back echo for gunshots: delay -> low-pass -> feedback.
-    const delay = ctx.createDelay(1);
-    delay.delayTime.value = 0.32;
-    const fb = ctx.createGain();
-    fb.gain.value = 0.28;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 1400;
-    delay.connect(lp).connect(fb).connect(delay);
-    lp.connect(this.master);
-    this.echo = delay;
-
-    // Open-desert reverb: a generated impulse response (decaying filtered noise
-    // with a few early reflections off the saloon and mesas).
+    // Outdoor acoustics for the gunshot. There's no room out here: what you
+    // hear after the bang is a handful of distinct, smeared, high-cut echoes
+    // off the saloon and the distant mesas, and a low rolling tail. All of it
+    // lives in one convolution impulse response (no feedback loops, so nothing
+    // repeats at a fixed interval).
     const conv = ctx.createConvolver();
-    conv.buffer = this.#impulseResponse(2.6);
-    const verbLp = ctx.createBiquadFilter();
-    verbLp.type = 'lowpass';
-    verbLp.frequency.value = 2200;
-    const verbOut = ctx.createGain();
-    verbOut.gain.value = 0.45;
-    conv.connect(verbLp).connect(verbOut).connect(this.master);
-    this.reverb = conv;
+    conv.normalize = false;
+    conv.buffer = this.#outdoorResponse();
+    // High-pass the send: the sub-bass boom stays dry and close; only the
+    // crack and blast carry far enough to come back as echoes.
+    const sendHp = ctx.createBiquadFilter();
+    sendHp.type = 'highpass';
+    sendHp.frequency.value = 250;
+    sendHp.Q.value = 0.7;
+    const outdoorOut = ctx.createGain();
+    outdoorOut.gain.value = 0.5;
+    sendHp.connect(conv).connect(outdoorOut).connect(this.master);
+    this.outdoor = sendHp;
+    /** Level of the echoes (0 = dry gunshot). */
+    this.outdoorLevel = outdoorOut.gain;
 
     // Soft clipper for the gunshot bus: adds weight and punch to the boom.
     const shaper = ctx.createWaveShaper();
@@ -148,24 +145,50 @@ export class SoundFX {
     this.shotShaper = shaper;
   }
 
-  #impulseResponse(seconds) {
+  /**
+   * Stereo impulse response of the open range (no direct sound):
+   *  - saloon facade, 32 m away: a fairly bright echo at ~0.19 s
+   *  - a gully to the left at ~95 m: faint echo at ~0.55 s
+   *  - mesas at 200–230 m, left and right: dark, smeared echoes at ~1.15–1.35 s
+   *  - a low "rolling thunder" wash underneath
+   * Each echo is band-limited noise with a short rise and exponential decay,
+   * scaled so its energy equals gain² (the convolver doesn't normalise).
+   */
+  #outdoorResponse() {
     const ctx = this.ctx;
-    const len = Math.floor(ctx.sampleRate * seconds);
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-    const reflections = [[0.045, 0.5], [0.11, 0.35], [0.19, 0.3], [0.33, 0.22]];
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch);
-      let lp = 0;
-      for (let i = 0; i < len; i++) {
-        const t = i / ctx.sampleRate;
-        lp += 0.35 * ((Math.random() * 2 - 1) - lp); // gentle low-pass on the tail
-        d[i] = lp * Math.exp(-t / 0.55) * 0.9;
+    const sr = ctx.sampleRate;
+    const len = Math.floor(sr * 3.2);
+    const buf = ctx.createBuffer(2, len, sr);
+    const L = buf.getChannelData(0);
+    const R = buf.getChannelData(1);
+
+    const addBurst = (t0, gain, cutoff, rise, decay, pan) => {
+      const start = Math.floor(t0 * sr);
+      const n = Math.min(len - start, Math.floor((rise + decay * 5) * sr));
+      const a = 1 - Math.exp((-2 * Math.PI * cutoff) / sr);
+      for (const [ch, chGain] of [[L, Math.sqrt((1 - pan) / 2)], [R, Math.sqrt((1 + pan) / 2)]]) {
+        const tmp = new Float32Array(n);
+        let s1 = 0;
+        let s2 = 0;
+        let energy = 0;
+        for (let i = 0; i < n; i++) {
+          const t = i / sr;
+          const env = t < rise ? t / rise : Math.exp(-(t - rise) / decay);
+          s1 += a * ((Math.random() * 2 - 1) - s1); // two one-pole low-passes
+          s2 += a * (s1 - s2);
+          tmp[i] = s2 * env;
+          energy += tmp[i] * tmp[i];
+        }
+        const k = (gain * chGain * Math.SQRT2) / Math.sqrt(energy || 1);
+        for (let i = 0; i < n; i++) ch[start + i] += tmp[i] * k;
       }
-      for (const [t, g] of reflections) {
-        const i = Math.floor((t + ch * 0.007) * ctx.sampleRate);
-        for (let j = 0; j < 200 && i + j < len; j++) d[i + j] += (Math.random() * 2 - 1) * g * Math.exp(-j / 60);
-      }
-    }
+    };
+
+    addBurst(0.187, 0.3, 2600, 0.008, 0.045, 0.15); // saloon
+    addBurst(0.55, 0.1, 1500, 0.02, 0.1, -0.4); // gully
+    addBurst(1.16, 0.18, 900, 0.05, 0.18, -0.65); // mesa left
+    addBurst(1.34, 0.13, 750, 0.06, 0.22, 0.6); // mesa right
+    addBurst(0.08, 0.16, 380, 0.3, 0.9, 0); // rolling tail
     return buf;
   }
 
@@ -202,7 +225,7 @@ export class SoundFX {
   /**
    * Black-powder revolver report: a supersonic crack, a long dark blast, a
    * sub-bass boom you feel in the chest, soft-clipped for weight, then the
-   * desert answers with reverb and a slap-back echo off the mesas.
+   * desert answers: an echo off the saloon and late, dark ones off the mesas.
    */
   gunshot() {
     this.#count('gunshot');
@@ -210,15 +233,13 @@ export class SoundFX {
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const bus = ctx.createGain();
-    bus.gain.value = 0.9;
+    bus.gain.value = 1.1;
     const post = ctx.createGain();
     post.gain.value = 0.85;
     bus.connect(this.shotShaper).connect(post).connect(this.master);
-    const sends = ctx.createGain();
-    sends.gain.value = 0.7;
-    post.connect(sends);
-    sends.connect(this.reverb);
-    sends.connect(this.echo);
+    const send = ctx.createGain();
+    send.gain.value = 0.9;
+    post.connect(send).connect(this.outdoor);
 
     this.#noiseBurst(t, 0.04, 'highpass', 3000, 1800, 0.9, bus); // crack
     this.#noiseBurst(t, 0.22, 'bandpass', 900, 220, 1.0, bus); // mid punch
@@ -354,5 +375,64 @@ export class SoundFX {
     const { dest, t } = this.#spatial(position, 0.9);
     this.#noiseBurst(t, 0.06, 'bandpass', 1400, 700, 0.7, dest);
     this.#tone(t, 0.06, 'square', 160, 90, 0.15, dest);
+  }
+
+  // -------------------------------------------------------------------------
+  // Reloading
+  // -------------------------------------------------------------------------
+
+  /** Crane unlatches and the cylinder swings out. */
+  cylinderOpen() {
+    this.#count('cylinderOpen');
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.#noiseBurst(t, 0.03, 'highpass', 3000, 2200, 0.4);
+    this.#tone(t + 0.02, 0.08, 'triangle', 700, 500, 0.25);
+  }
+
+  /** Cylinder snapping shut into the frame. */
+  cylinderClose() {
+    this.#count('cylinderClose');
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.#noiseBurst(t, 0.04, 'bandpass', 2400, 1600, 0.6);
+    this.#tone(t, 0.06, 'triangle', 520, 380, 0.35);
+  }
+
+  /** Ejector rod stroke as the spent cases drop out. */
+  ejectorRod() {
+    this.#count('ejector');
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.#noiseBurst(t, 0.07, 'bandpass', 1800, 1200, 0.3);
+  }
+
+  /** A cartridge sliding home in a chamber. */
+  roundInsert() {
+    this.#count('insert');
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.#noiseBurst(t, 0.05, 'bandpass', 2600, 3400, 0.25);
+    this.#tone(t + 0.04, 0.03, 'triangle', 2200, 1700, 0.2);
+  }
+
+  /** Empty brass case hitting something: short bright ring. */
+  brassTink(position, speed = 1) {
+    this.#count('brass');
+    if (!this.ctx) return;
+    const { dest, t } = this.#spatial(position, Math.min(0.9, 0.25 + speed * 0.25));
+    const f = 3400 + Math.random() * 1600;
+    this.#tone(t, 0.22, 'sine', f, f, 0.3, dest);
+    this.#tone(t, 0.14, 'sine', f * 1.51, f * 1.5, 0.15, dest);
+    this.#tone(t, 0.08, 'sine', f * 2.37, f * 2.35, 0.08, dest);
+  }
+
+  /** Fingers in the leather cartridge pouch. */
+  pouch() {
+    this.#count('pouch');
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.#noiseBurst(t, 0.09, 'bandpass', 1200, 700, 0.25);
+    this.#noiseBurst(t + 0.05, 0.03, 'highpass', 4000, 3500, 0.15);
   }
 }

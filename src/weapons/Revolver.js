@@ -17,9 +17,18 @@ import { CANNON } from '../physics/PhysicsWorld.js';
  *     trigger and fires at the break point (double action).
  *   - Fanning with the trigger held fires the moment the hammer is slapped.
  *
+ * Reloading (no holster needed):
+ *   - B/Y swings the cylinder out on its crane; spent casings fall out as
+ *     physics objects.
+ *   - Grab cartridges from the pouch on the left hip with the free hand and
+ *     hold them at the open cylinder: they feed into the empty chambers one
+ *     at a time, in firing order.
+ *   - B/Y again closes it, or flick the wrist (fast roll) to snap it shut with
+ *     a free spin; after a spin the chamber that ends up under the hammer is
+ *     wherever the cylinder stopped.
+ *
  * Holding: the gun stays in your hand only while the grip button is held.
- *   - Let go at the hip and it slides into the holster. Until reloading arrives
- *     in Pass 4, holstering refills the cylinder.
+ *   - Let go at the hip and it slides into the holster.
  *   - Let go anywhere else and it becomes a rigid body: it is thrown with your
  *     hand's velocity and spin, falls, clatters off the ground and props, and
  *     can break bottles, ring gongs and knock over duelists. Pick it up again
@@ -27,10 +36,14 @@ import { CANNON } from '../physics/PhysicsWorld.js';
  *   - Click a thumbstick to recall a dropped gun to the holster. A gun that
  *     leaves the play area returns on its own.
  *
+ * Ballistics: the bullet leaves at MUZZLE_VELOCITY and drops under gravity;
+ * its path is traced in short straight segments, each one raycast.
+ *
  * Sights: a rear notch on the top strap and a front blade with a brass bead.
- * The sight line sits above the bore and is angled to cross the bullet path at
- * SIGHT_ZERO metres, so a sight picture on the target at that range is a hit
- * on the point of aim (about 2 cm low up close, about 1 cm high at 25 m).
+ * The sight line sits above the bore and is angled to meet the bullet's
+ * (dropping) path at SIGHT_ZERO metres, so a sight picture on a target at that
+ * range is a hit on the point of aim (about 2 cm low up close, about 1.5 cm
+ * low at 25 m as the drop catches up).
  */
 export const RevolverState = Object.freeze({
   HOLSTERED: 'holstered',
@@ -52,13 +65,23 @@ const GUN_MASS = 1.1;
 const CLATTER_MIN_SPEED = 0.5; // m/s impact speed for a clatter sound
 const CLATTER_COOLDOWN = 0.08; // s
 
+// Ballistics (.45 Colt black powder, roughly).
+export const MUZZLE_VELOCITY = 260; // m/s
+const GRAVITY = 9.81;
+const MAX_RANGE = 150; // metres traced
+const SEGMENT_TIME = 1 / 120; // s per traced segment (~2.2 m)
+
 // Sights (gun-local metres). See the class comment.
 const BORE_Y = 0.06;
 const SIGHT_ZERO = 15; // metres
 const REAR_SIGHT = { y: 0.0815, z: -0.012 }; // bottom of the rear notch
 const FRONT_SIGHT_Z = -0.196;
-/** Top of the front blade: on the line from the rear notch to the bore at SIGHT_ZERO. */
-const FRONT_SIGHT_Y = REAR_SIGHT.y + ((BORE_Y - REAR_SIGHT.y) * (REAR_SIGHT.z - FRONT_SIGHT_Z)) / (REAR_SIGHT.z + SIGHT_ZERO);
+/** How far the bullet has dropped below the bore line after `range` metres (gun level). */
+export const bulletDrop = (range) => 0.5 * GRAVITY * (range / MUZZLE_VELOCITY) ** 2;
+/** Where the bullet is at SIGHT_ZERO (gun-local y): the sight line must pass through it. */
+const ZERO_Y = BORE_Y - bulletDrop(SIGHT_ZERO);
+/** Top of the front blade: on the line from the rear notch to the bullet at SIGHT_ZERO. */
+const FRONT_SIGHT_Y = REAR_SIGHT.y + ((ZERO_Y - REAR_SIGHT.y) * (REAR_SIGHT.z - FRONT_SIGHT_Z)) / (REAR_SIGHT.z + SIGHT_ZERO);
 const BARREL_R = 0.0085;
 
 const SA_BREAK = 0.55; // trigger value that fires a cocked hammer
@@ -81,8 +104,17 @@ const RECOIL_KICK_ANG = 9; // rad/s impulse, muzzle up
 const RECOIL_KICK_Z = 0.55; // m/s impulse, backwards
 const RECOIL_SUBSTEP = 1 / 240;
 
-const MUZZLE_VELOCITY_RANGE = 200; // metres; ballistic drop comes in Pass 4
 const FLASH_TIME = 0.05;
+const RECOIL_KICK_YAW = 2.5; // rad/s, random sideways
+
+// Cylinder crane and reloading.
+const CRANE_OPEN_ANGLE = 1.6; // rad, swung out to the left
+const EJECT_DELAY = 0.12; // s after opening before casings drop out
+const FEED_INTERVAL = 0.18; // s per round fed from the hand
+const FEED_RADIUS = 0.09; // metres, hand -> open cylinder
+const FLICK_ROLL_RATE = 9; // rad/s of wrist roll that snaps the cylinder shut
+const SPIN_START = 26; // rad/s free spin after a flick close
+const CHAMBER_R = 0.012;
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -100,8 +132,12 @@ export class Revolver extends THREE.EventDispatcher {
    * @param {import('../physics/PhysicsWorld.js').PhysicsWorld} deps.physics
    * @param {THREE.Scene} deps.scene
    */
-  constructor({ xr, holster, sfx, impacts, getColliders, physics, scene }) {
+  constructor({ xr, holster, sfx, impacts, getColliders, physics, scene, fx, casings }) {
     super();
+    this.fx = fx;
+    this.casings = casings;
+    /** Set after construction: the AmmoPouch the free hand reloads from. */
+    this.pouch = null;
     this.xr = xr;
     this.physics = physics;
     this.scene = scene;
@@ -127,9 +163,17 @@ export class Revolver extends THREE.EventDispatcher {
     this.triggerArmed = true;
 
     this.hammerAngle = 0;
-    this.cylinderAngle = 0;
-    this.cylinderTarget = 0;
-    this.recoil = { ang: 0, angVel: 0, z: 0, zVel: 0 };
+    // Chamber i sits at angle -i*STEP on the cylinder, so the chamber under the
+    // hammer (top) is the one whose angle matches -cylinderAngle.
+    this.cylinderAngle = -this.chamberIndex * CHAMBER_STEP;
+    this.cylinderTarget = this.cylinderAngle;
+    this.cylinderSpin = 0; // rad/s free spin after a flick close
+    this.cylinderOpen = false;
+    this.craneAngle = 0;
+    this.openTime = 0;
+    this.ejectTimer = -1;
+    this.feedTimer = 0;
+    this.recoil = { ang: 0, angVel: 0, z: 0, zVel: 0, yaw: 0, yawVel: 0 };
     this.flashTimer = 0;
     this.fanCooldown = 0;
     this.stickWasBack = false;
@@ -207,22 +251,43 @@ export class Revolver extends THREE.EventDispatcher {
     bore.rotation.y = Math.PI;
     bore.castShadow = false;
 
-    // Cylinder: axis sits below the bore so the top chamber lines up with it.
-    const CHAMBER_R = 0.012;
+    // Cylinder on a crane: the crane hinges on an axis parallel to the bore,
+    // below and left of the cylinder, and swings it out to the left for loading.
+    // The cylinder axis sits below the bore so the top chamber lines up with it.
+    const cylY = BORE_Y - CHAMBER_R;
+    this.crane = new THREE.Group();
+    this.crane.position.set(-0.02, cylY - 0.018, -0.04);
+    root.add(this.crane);
+    mesh(new THREE.BoxGeometry(0.02, 0.004, 0.006), steel, this.crane, 0.01, 0.009, 0.018); // crane arm
     this.cylinder = new THREE.Group();
-    this.cylinder.position.set(0, BORE_Y - CHAMBER_R, -0.04);
-    root.add(this.cylinder);
+    this.cylinder.position.set(0.02, 0.018, 0);
+    this.crane.add(this.cylinder);
     const cyl = mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.042, 12), steel, this.cylinder);
     cyl.rotation.x = Math.PI / 2;
-    // Flutes / chamber mouths so cylinder rotation is visible.
+    // Chamber mouths (front) and cartridge heads (rear) so you can see what's loaded.
     this.chamberMarkers = [];
+    this.caseHeads = [];
+    const headGeo = new THREE.CircleGeometry(0.0057, 12);
+    const primerGeo = new THREE.CircleGeometry(0.0018, 8);
+    this.caseMaterials = {
+      live: new THREE.MeshStandardMaterial({ color: 0xd4ab52, metalness: 0.9, roughness: 0.28 }),
+      spent: new THREE.MeshStandardMaterial({ color: 0x7e6232, metalness: 0.7, roughness: 0.55 }),
+      primerLive: new THREE.MeshStandardMaterial({ color: 0xc8c2b4, metalness: 0.8, roughness: 0.3 }),
+      primerSpent: new THREE.MeshStandardMaterial({ color: 0x3a3632, metalness: 0.5, roughness: 0.6 }),
+    };
     for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      const mouth = mesh(new THREE.CircleGeometry(0.0045, 8), dark, this.cylinder,
-        Math.sin(a) * CHAMBER_R, Math.cos(a) * CHAMBER_R, -0.0215);
+      const a = -i * CHAMBER_STEP;
+      const x = Math.sin(a) * CHAMBER_R;
+      const y = Math.cos(a) * CHAMBER_R;
+      const mouth = mesh(new THREE.CircleGeometry(0.0045, 8), dark, this.cylinder, x, y, -0.0215);
       mouth.rotation.y = Math.PI;
       mouth.castShadow = false;
       this.chamberMarkers.push(mouth);
+      const head = mesh(headGeo, this.caseMaterials.live, this.cylinder, x, y, 0.0216);
+      head.castShadow = false;
+      const primer = mesh(primerGeo, this.caseMaterials.primerLive, head, 0, 0, 0.0002);
+      primer.castShadow = false;
+      this.caseHeads.push({ head, primer });
     }
 
     // Hammer: pivots at the back of the frame; cocking swings the spur back.
@@ -362,9 +427,9 @@ export class Revolver extends THREE.EventDispatcher {
     this.physics.removeBody(this.body);
     this.state = RevolverState.HOLSTERING;
     this.holster.socket.attach(this.object);
+    if (this.cylinderOpen) this.closeCylinder(false);
     this.#startTween(new THREE.Vector3(), new THREE.Quaternion(), duration, () => {
       this.state = RevolverState.HOLSTERED;
-      this.chambers.fill('live'); // temporary reload until Pass 4
       this.sfx.holster();
       this.dispatchEvent({ type: 'holstered' });
     });
@@ -424,7 +489,7 @@ export class Revolver extends THREE.EventDispatcher {
 
   /** Cock the hammer: advances the cylinder one chamber. */
   cock() {
-    if (this.cocked || !this.isHeld) return false;
+    if (this.cocked || !this.isHeld || this.cylinderOpen) return false;
     this.cocked = true;
     this.#advanceCylinder();
     this.sfx.hammerCock();
@@ -453,19 +518,51 @@ export class Revolver extends THREE.EventDispatcher {
     }
   }
 
+  /**
+   * Trace the bullet: constant-gravity flight in SEGMENT_TIME steps, each
+   * segment raycast against the colliders. Returns the first hit (with
+   * `distance` measured along the path) or null.
+   */
+  traceBullet(origin, direction) {
+    const colliders = this.getColliders();
+    const pos = origin.clone();
+    const vel = direction.clone().multiplyScalar(MUZZLE_VELOCITY);
+    const next = new THREE.Vector3();
+    const seg = new THREE.Vector3();
+    const t = SEGMENT_TIME;
+    let travelled = 0;
+    while (travelled < MAX_RANGE) {
+      next.copy(pos).addScaledVector(vel, t);
+      next.y -= 0.5 * GRAVITY * t * t;
+      vel.y -= GRAVITY * t;
+      seg.subVectors(next, pos);
+      const len = seg.length();
+      this.raycaster.set(pos, seg.divideScalar(len));
+      this.raycaster.far = len;
+      const hit = this.raycaster.intersectObjects(colliders, true)[0];
+      if (hit) {
+        hit.distance += travelled;
+        return hit;
+      }
+      travelled += len;
+      pos.copy(next);
+    }
+    return null;
+  }
+
   #shoot() {
     this.muzzle.updateWorldMatrix(true, false);
     const origin = new THREE.Vector3().setFromMatrixPosition(this.muzzle.matrixWorld);
     const direction = new THREE.Vector3(0, 0, -1).transformDirection(this.muzzle.matrixWorld);
 
-    this.raycaster.set(origin, direction);
-    this.raycaster.far = MUZZLE_VELOCITY_RANGE;
-    const hit = this.raycaster.intersectObjects(this.getColliders(), true)[0] ?? null;
+    const hit = this.traceBullet(origin, direction);
     if (hit) this.impacts.spawn(hit);
+    this.fx?.muzzle(origin, direction);
 
-    // Recoil and flash are applied after the ray, so they never affect aim.
+    // Recoil and flash are applied after the trace, so they never affect aim.
     this.recoil.angVel += RECOIL_KICK_ANG * (0.9 + Math.random() * 0.2);
     this.recoil.zVel += RECOIL_KICK_Z;
+    this.recoil.yawVel += (Math.random() * 2 - 1) * RECOIL_KICK_YAW;
     this.flashTimer = FLASH_TIME;
     this.flash.rotation.z = Math.random() * Math.PI;
     this.flash.scale.setScalar(0.8 + Math.random() * 0.5);
@@ -480,12 +577,23 @@ export class Revolver extends THREE.EventDispatcher {
     const trig = hand.values[BUTTON.TRIGGER];
     if (trig < TRIGGER_RESET) this.triggerArmed = true;
 
-    // Cock: face button or thumbstick pulled back (axes y > 0 = towards player).
+    // B/Y: swing the cylinder out / in.
+    if (hand.justPressed[BUTTON.SECONDARY]) {
+      if (this.cylinderOpen) this.closeCylinder(false);
+      else this.openCylinder();
+    }
+
+    // Cock: A/X or thumbstick pulled back (axes y > 0 = towards player).
     const stickBack = hand.thumbstick.y > STICK_COCK;
-    if (hand.justPressed[BUTTON.PRIMARY] || hand.justPressed[BUTTON.SECONDARY] || (stickBack && !this.stickWasBack)) {
+    if (hand.justPressed[BUTTON.PRIMARY] || (stickBack && !this.stickWasBack)) {
       this.cock();
     }
     this.stickWasBack = stickBack;
+
+    if (this.cylinderOpen) {
+      this.#updateReload(dt);
+      return; // nothing fires with the cylinder out
+    }
 
     // Fanning: the free hand swipes fast across the hammer spur.
     this.fanCooldown = Math.max(0, this.fanCooldown - dt);
@@ -518,6 +626,134 @@ export class Revolver extends THREE.EventDispatcher {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Cylinder & reloading
+  // -------------------------------------------------------------------------
+
+  /** Chambers that can take a round now (after ejecting spent cases). */
+  get roundsWanted() {
+    return this.chambers.filter((c) => c !== 'live').length;
+  }
+
+  openCylinder() {
+    if (this.cylinderOpen || !this.isHeld) return false;
+    this.cylinderOpen = true;
+    this.cocked = false;
+    this.openTime = 0;
+    this.ejectTimer = EJECT_DELAY;
+    this.cylinderSpin = 0;
+    this.cylinderAngle = this.cylinderTarget;
+    this.sfx.cylinderOpen();
+    this.xr.pulse(this.hand, 0.3, 25);
+    this.dispatchEvent({ type: 'cylinderOpen' });
+    return true;
+  }
+
+  /** @param {boolean} spin true for a wrist-flick close: the cylinder spins free */
+  closeCylinder(spin) {
+    if (!this.cylinderOpen) return false;
+    this.cylinderOpen = false;
+    this.ejectTimer = -1;
+    if (spin) this.cylinderSpin = SPIN_START * (0.85 + Math.random() * 0.3);
+    this.sfx.cylinderClose();
+    if (this.hand) this.xr.pulse(this.hand, 0.45, 30);
+    this.dispatchEvent({ type: 'cylinderClose', spin });
+    return true;
+  }
+
+  /** Spent cases fall out of the swung-out cylinder. */
+  #ejectSpent() {
+    this.cylinder.updateWorldMatrix(true, true);
+    const q = this.cylinder.getWorldQuaternion(new THREE.Quaternion());
+    const back = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    let n = 0;
+    this.chambers.forEach((c, i) => {
+      if (c !== 'spent') return;
+      this.chambers[i] = 'empty';
+      n++;
+      const pos = this.caseHeads[i].head.getWorldPosition(new THREE.Vector3());
+      const vel = back.clone().multiplyScalar(0.6 + Math.random() * 0.5)
+        .add(new THREE.Vector3((Math.random() - 0.5) * 0.4, -0.3 - Math.random() * 0.3, (Math.random() - 0.5) * 0.4));
+      if (this.hand) vel.add(this.hand.velocity);
+      this.casings?.eject(pos, q, vel);
+    });
+    if (n) {
+      this.sfx.ejectorRod();
+      this.dispatchEvent({ type: 'eject', count: n });
+    }
+  }
+
+  /** Next empty chamber in firing order (the one after the hammer first). */
+  #nextEmptyChamber() {
+    for (let k = 1; k <= 6; k++) {
+      const i = (this.chamberIndex + k) % 6;
+      if (this.chambers[i] === 'empty') return i;
+    }
+    return -1;
+  }
+
+  #updateReload(dt) {
+    this.openTime += dt;
+    if (this.ejectTimer >= 0) {
+      this.ejectTimer -= dt;
+      if (this.ejectTimer < 0) this.#ejectSpent();
+    }
+
+    // Feed rounds from a free hand held at the cylinder.
+    this.feedTimer = Math.max(0, this.feedTimer - dt);
+    if (this.feedTimer === 0 && this.ejectTimer < 0 && this.pouch) {
+      this.cylinder.getWorldPosition(_v1);
+      const loader = this.xr.hands.find((h) => h !== this.hand && h.held?.type === 'rounds' && h.position.distanceTo(_v1) < FEED_RADIUS);
+      const i = this.#nextEmptyChamber();
+      if (loader && i >= 0) {
+        this.chambers[i] = 'live';
+        this.pouch.consume(loader);
+        this.feedTimer = FEED_INTERVAL;
+        this.sfx.roundInsert();
+        this.xr.pulse(this.hand, 0.12, 15);
+        this.xr.pulse(loader, 0.18, 15);
+        this.dispatchEvent({ type: 'load', chamber: i });
+      }
+    }
+
+    // A sharp roll of the wrist snaps the cylinder shut.
+    if (this.openTime > 0.25) {
+      this.object.getWorldQuaternion(_q1);
+      const axis = _v2.set(0, 0, -1).applyQuaternion(_q1);
+      if (Math.abs(this.hand.angularVelocity.dot(axis)) > FLICK_ROLL_RATE) this.closeCylinder(true);
+    }
+  }
+
+  /** Free spin after a flick close: ratchets past each chamber, then settles. */
+  #updateSpin(dt) {
+    const before = Math.floor(this.cylinderAngle / CHAMBER_STEP);
+    this.cylinderAngle -= this.cylinderSpin * dt;
+    this.cylinderSpin *= Math.exp(-2.6 * dt);
+    if (Math.floor(this.cylinderAngle / CHAMBER_STEP) !== before) {
+      this.sfx.click(1.3, 0.12);
+      if (this.hand) this.xr.pulse(this.hand, 0.1, 10); // light "cylinder spin" rumble
+    }
+    if (this.cylinderSpin < 2.5) {
+      // Settle into the nearest detent; that chamber is now under the hammer.
+      const k = Math.round(-this.cylinderAngle / CHAMBER_STEP);
+      this.cylinderSpin = 0;
+      this.cylinderTarget = -k * CHAMBER_STEP;
+      this.chamberIndex = ((k % 6) + 6) % 6;
+      this.sfx.click(1.0, 0.25);
+      this.dispatchEvent({ type: 'spinStop', chamber: this.chamberIndex });
+    }
+  }
+
+  #updateCaseHeads() {
+    const m = this.caseMaterials;
+    this.chambers.forEach((c, i) => {
+      const { head, primer } = this.caseHeads[i];
+      head.visible = c !== 'empty';
+      head.material = c === 'live' ? m.live : m.spent;
+      primer.material = c === 'live' ? m.primerLive : m.primerSpent;
+    });
+  }
+
   #updateDropped() {
     const b = this.body;
     this.object.position.set(b.position.x, b.position.y, b.position.z);
@@ -545,15 +781,22 @@ export class Revolver extends THREE.EventDispatcher {
     // Hammer: cocked, or rising with a double-action pull, else at rest.
     let hammerTarget = 0;
     if (this.cocked) hammerTarget = HAMMER_COCKED_ANGLE;
-    else if (this.triggerArmed && this.isHeld) {
+    else if (this.triggerArmed && this.isHeld && !this.cylinderOpen) {
       hammerTarget = HAMMER_COCKED_ANGLE * THREE.MathUtils.smoothstep(trig, 0.15, DA_BREAK);
     }
     this.hammerAngle += (hammerTarget - this.hammerAngle) * Math.min(1, dt * 40);
     this.hammer.rotation.x = this.hammerAngle;
 
-    // Cylinder indexes quickly to its detent.
-    this.cylinderAngle += (this.cylinderTarget - this.cylinderAngle) * Math.min(1, dt * 30);
+    // Cylinder: free spin after a flick, else index quickly to its detent.
+    if (this.cylinderSpin > 0) this.#updateSpin(dt);
+    else this.cylinderAngle += (this.cylinderTarget - this.cylinderAngle) * Math.min(1, dt * 30);
     this.cylinder.rotation.z = this.cylinderAngle;
+
+    // Crane swings the cylinder out / in.
+    const craneTarget = this.cylinderOpen ? CRANE_OPEN_ANGLE : 0;
+    this.craneAngle += (craneTarget - this.craneAngle) * Math.min(1, dt * 22);
+    this.crane.rotation.z = this.craneAngle;
+    this.#updateCaseHeads();
 
     // Recoil spring: semi-implicit Euler in fixed substeps, so the kick feels
     // identical at 72, 90 and 120 Hz and on a hitched frame.
@@ -565,8 +808,11 @@ export class Revolver extends THREE.EventDispatcher {
       r.ang += r.angVel * h;
       r.zVel += (-RECOIL_K * r.z - RECOIL_C * r.zVel) * h;
       r.z += r.zVel * h;
+      r.yawVel += (-RECOIL_K * r.yaw - RECOIL_C * r.yawVel) * h;
+      r.yaw += r.yawVel * h;
     }
     this.recoilPivot.rotation.x = r.ang;
+    this.recoilPivot.rotation.y = r.yaw;
     this.recoilPivot.position.z = r.z;
 
     this.flashTimer = Math.max(0, this.flashTimer - dt);

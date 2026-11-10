@@ -64,7 +64,7 @@ module.exports = async function targetsSuite() {
   const BORE_OFFSET = new THREE.Vector3(0, 0.06, 0);
   const aimAt = async (point) => {
     // Settle any recoil from the previous shot so the bore is where we aim.
-    Object.assign(rev.recoil, { ang: 0, angVel: 0, z: 0, zVel: 0 });
+    for (const k of Object.keys(rev.recoil)) rev.recoil[k] = 0;
     const m = new THREE.Matrix4().lookAt(GUN.clone().add(BORE_OFFSET), point, new THREE.Vector3(0, 1, 0));
     pose(R, GUN, new THREE.Quaternion().setFromRotationMatrix(m));
     await frames(2);
@@ -83,7 +83,7 @@ module.exports = async function targetsSuite() {
   rev.addEventListener('shot', (e) => { lastShot = e; });
   const fire = async () => {
     rev.chambers.fill('live');
-    Object.assign(rev.recoil, { ang: 0, angVel: 0, z: 0, zVel: 0 });
+    for (const k of Object.keys(rev.recoil)) rev.recoil[k] = 0;
     lastReport = null;
     lastShot = null;
     rgp.buttons[4].pressed = true; await frames(2);

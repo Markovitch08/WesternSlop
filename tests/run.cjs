@@ -15,6 +15,7 @@ const SUITES = {
   revolver: require('./suites/revolver.cjs'),
   targets: require('./suites/targets.cjs'),
   physics: require('./suites/physics.cjs'),
+  reload: require('./suites/reload.cjs'),
 };
 
 (async () => {

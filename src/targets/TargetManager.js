@@ -33,8 +33,9 @@ export class TargetManager extends THREE.EventDispatcher {
    * @param {{ sfx: import('../audio/SoundFX.js').SoundFX, camera: THREE.Camera,
    *   physics: import('../physics/PhysicsWorld.js').PhysicsWorld }} deps
    */
-  constructor(scene, { sfx, camera, physics }) {
+  constructor(scene, { sfx, camera, physics, fx = null }) {
     super();
+    this.fx = fx;
     this.physics = physics;
     this.scene = scene;
     this.sfx = sfx;
@@ -141,6 +142,15 @@ export class TargetManager extends THREE.EventDispatcher {
     this.dirty = true;
     const hit = shot.hit;
     if (!hit) return null;
+
+    // Dust puff or sparks at the impact, by surface.
+    const surfaceTag = hit.object.userData.surface ?? 'sand';
+    if (this.fx && surfaceTag !== 'glass') {
+      const normal = hit.face
+        ? hit.face.normal.clone().applyMatrix3(new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld)).normalize()
+        : new THREE.Vector3(0, 1, 0);
+      this.fx.impact(hit.point, normal, surfaceTag, shot.direction);
+    }
 
     const target = hit.object.userData.target;
     const result = target ? target.onHit(hit, shot, this.time) : null;

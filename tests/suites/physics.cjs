@@ -173,15 +173,18 @@ module.exports = async function physicsSuite() {
   const rear = rev.sightRear.position;
   const fr = rev.sightFront.position;
   const boreY = rev.muzzle.position.y;
-  const crossZ = rear.z + ((boreY - rear.y) * (fr.z - rear.z)) / (fr.y - rear.y);
-  check('sight line crosses the bore at 15 m', Math.abs(crossZ + 15) < 0.05, crossZ.toFixed(3));
+  const { bulletDrop } = await import('/src/weapons/Revolver.js');
+  const sightYAt15 = rear.y + ((fr.y - rear.y) * (-15 - rear.z)) / (fr.z - rear.z);
+  const bulletYAt15 = boreY - bulletDrop(15);
+  check('sight line meets the dropping bullet at 15 m', Math.abs(sightYAt15 - bulletYAt15) < 0.0005,
+    `sight ${sightYAt15.toFixed(4)} bullet ${bulletYAt15.toFixed(4)}`);
   check('front blade is above the barrel and below the rear notch', fr.y > boreY + 0.0085 && fr.y < rear.y, `${fr.y.toFixed(4)} ${rear.y}`);
 
   // End to end: line the sights up on a target, fire, see where the bullet lands.
   check('drawn for sight tests', await grabAt(holster.object.getWorldPosition(V(0, 0, 0))));
   const GUN = V(0.3, 1.5, 0.2);
   const sightAim = async (target) => {
-    Object.assign(rev.recoil, { ang: 0, angVel: 0, z: 0, zVel: 0 });
+    for (const k of Object.keys(rev.recoil)) rev.recoil[k] = 0;
     const dirLocal = fr.clone().sub(rear).normalize();
     const qLocalInv = new THREE.Quaternion().setFromUnitVectors(V(0, 0, -1), dirLocal).invert();
     let q = new THREE.Quaternion();
@@ -197,7 +200,7 @@ module.exports = async function physicsSuite() {
   tm.addEventListener('hit', (e) => { report = e.report; });
   const fire = async () => {
     rev.chambers.fill('live');
-    Object.assign(rev.recoil, { ang: 0, angVel: 0, z: 0, zVel: 0 });
+    for (const k of Object.keys(rev.recoil)) rev.recoil[k] = 0;
     report = null;
     rgp.buttons[4].pressed = true; await frames(2);
     rgp.buttons[4].pressed = false; await frames(2);

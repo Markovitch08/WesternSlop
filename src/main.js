@@ -9,6 +9,9 @@ import { Holster } from './weapons/Holster.js';
 import { SoundFX } from './audio/SoundFX.js';
 import { ImpactFX } from './fx/ImpactFX.js';
 import { PhysicsWorld } from './physics/PhysicsWorld.js';
+import { ParticleFX } from './fx/ParticleFX.js';
+import { CasingFX } from './fx/CasingFX.js';
+import { AmmoPouch } from './weapons/AmmoPouch.js';
 import { TargetManager } from './targets/TargetManager.js';
 
 // ---------------------------------------------------------------------------
@@ -58,7 +61,9 @@ const physics = new PhysicsWorld();
 const environment = createEnvironment(scene, renderer, physics);
 const xr = new XRManager(renderer, playerRig);
 const sfx = new SoundFX();
-const targets = new TargetManager(scene, { sfx, camera, physics });
+const fx = new ParticleFX(scene);
+const casings = new CasingFX(scene, physics, sfx);
+const targets = new TargetManager(scene, { sfx, camera, physics, fx });
 const impacts = new ImpactFX(scene);
 const holster = new Holster(scene, 'right');
 const colliders = [...environment.colliders];
@@ -69,12 +74,19 @@ const revolver = new Revolver({
   impacts,
   physics,
   scene,
+  fx,
+  casings,
   getColliders: () => {
     colliders.length = environment.colliders.length;
     colliders.push(...targets.colliders);
     return colliders;
   },
 });
+
+// Free-hand reloading: cartridges come from a pouch on the left hip. Created
+// after the revolver so a squeeze near the gun grabs the gun first.
+const pouch = new AmmoPouch(scene, xr, sfx, () => revolver.roundsWanted, 'left');
+revolver.pouch = pouch;
 
 // Every shot is scored (accuracy), and reacts with the target or surface it hit.
 revolver.addEventListener('shot', (shot) => targets.handleShot(shot));
@@ -115,9 +127,12 @@ renderer.setAnimationLoop(() => {
 
   xr.update(dt);
   holster.update(camera, dt);
+  pouch.update(camera, dt);
   targets.update(dt);
   physics.step(dt);
   revolver.update(dt);
+  casings.update(dt);
+  fx.update(dt);
   environment.update(dt);
   sfx.updateListener(camera);
   if (orbit.enabled) orbit.update();
@@ -126,4 +141,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings };
