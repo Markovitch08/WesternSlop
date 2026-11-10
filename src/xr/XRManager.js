@@ -36,8 +36,16 @@ class Hand {
     this.values = new Array(BUTTON_COUNT).fill(0);
     this.thumbstick = new THREE.Vector2();
 
-    /** Object currently held by this hand (set by grab logic in Pass 2). */
+    /** Object currently held by this hand (e.g. the Revolver), or null. */
     this.held = null;
+    /** Controller model shown in the grip space; hidden while holding. */
+    this.model = null;
+
+    /** Grip-space world position and velocity (m/s), updated every frame. */
+    this.position = new THREE.Vector3();
+    this.velocity = new THREE.Vector3();
+    this._prevPosition = new THREE.Vector3();
+    this._hasPrev = false;
   }
 
   get gamepad() {
@@ -69,8 +77,8 @@ class Hand {
 
 /**
  * Owns WebXR controller tracking, controller visualisation, pointer rays,
- * per-frame button polling and haptics. Grabbing/holstering is layered on top
- * in Pass 2 via the `held` slot and the emitted events.
+ * per-frame button polling and haptics. Grabbing is layered on top by the
+ * objects that listen to the squeeze events and fill the `held` slot.
  */
 export class XRManager extends THREE.EventDispatcher {
   /**
@@ -89,10 +97,12 @@ export class XRManager extends THREE.EventDispatcher {
     for (let i = 0; i < 2; i++) {
       const controller = renderer.xr.getController(i);
       const grip = renderer.xr.getControllerGrip(i);
-      grip.add(modelFactory.createControllerModel(grip));
+      const model = modelFactory.createControllerModel(grip);
+      grip.add(model);
       controller.add(this.#createPointerRay());
 
       const hand = new Hand(i, controller, grip);
+      hand.model = model;
       this.hands.push(hand);
 
       controller.addEventListener('connected', (e) => {
@@ -105,6 +115,7 @@ export class XRManager extends THREE.EventDispatcher {
       controller.addEventListener('disconnected', () => {
         hand.connected = false;
         hand.inputSource = null;
+        hand._hasPrev = false;
         hand.reset();
         this.dispatchEvent({ type: 'disconnected', hand });
       });
@@ -138,12 +149,25 @@ export class XRManager extends THREE.EventDispatcher {
   }
 
   /** Call once per frame before gameplay logic. */
-  update() {
+  update(dt) {
     for (const hand of this.hands) {
-      if (hand.connected) hand.poll();
-      // Hide the pointer ray while something is held.
+      if (hand.connected) {
+        hand.poll();
+        hand.grip.updateWorldMatrix(true, false);
+        hand.position.setFromMatrixPosition(hand.grip.matrixWorld);
+        if (hand._hasPrev && dt > 0) {
+          hand.velocity.subVectors(hand.position, hand._prevPosition).divideScalar(dt);
+        } else {
+          hand.velocity.set(0, 0, 0);
+        }
+        hand._prevPosition.copy(hand.position);
+        hand._hasPrev = true;
+      }
+      // Hide the pointer ray and controller model while something is held.
+      const empty = hand.held === null;
       const pointer = hand.controller.getObjectByName('pointer');
-      if (pointer) pointer.visible = hand.held === null;
+      if (pointer) pointer.visible = empty;
+      if (hand.model) hand.model.visible = empty;
     }
   }
 
@@ -152,6 +176,7 @@ export class XRManager extends THREE.EventDispatcher {
    * @returns {THREE.Intersection[]}
    */
   raycastFrom(hand, objects, far = 100) {
+    hand.controller.updateWorldMatrix(true, false);
     _tmpMatrix.identity().extractRotation(hand.controller.matrixWorld);
     this.raycaster.ray.origin.setFromMatrixPosition(hand.controller.matrixWorld);
     this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(_tmpMatrix);

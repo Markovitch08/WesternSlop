@@ -6,15 +6,17 @@ import * as THREE from 'three';
  * and dust particles are built in Pass 3.
  *
  * @param {THREE.Scene} scene
- * @returns {{ sun: THREE.DirectionalLight, update: (dt: number) => void }}
+ * @param {THREE.WebGLRenderer} renderer
+ * @returns {{ sun: THREE.DirectionalLight, colliders: THREE.Object3D[], update: (dt: number) => void }}
  */
-export function createEnvironment(scene) {
+export function createEnvironment(scene, renderer) {
   const skyColor = new THREE.Color(0xe9c89a);
   scene.background = skyColor;
   scene.fog = new THREE.Fog(skyColor, 30, 140);
+  scene.environment = createDesertEnvMap(renderer);
 
   // Warm sky / sand bounce light.
-  const hemi = new THREE.HemisphereLight(0xfff1d6, 0xa0703f, 1.1);
+  const hemi = new THREE.HemisphereLight(0xfff1d6, 0xa0703f, 0.55);
   scene.add(hemi);
 
   // Low afternoon sun. A tight shadow frustum around the play area keeps the
@@ -51,6 +53,40 @@ export function createEnvironment(scene) {
 
   return {
     sun,
+    /** Static meshes bullets can hit. */
+    colliders: [ground, bench],
     update(/* dt */) {},
   };
+}
+
+/**
+ * Image-based lighting for metals: a pre-filtered sky-over-sand gradient with
+ * a hot spot toward the sun. Built once at startup, so it costs nothing per frame.
+ */
+function createDesertEnvMap(renderer) {
+  const envScene = new THREE.Scene();
+  const geo = new THREE.SphereGeometry(10, 32, 16);
+  const colors = [];
+  const pos = geo.attributes.position;
+  const sky = new THREE.Color(0xb8d4f0);
+  const horizon = new THREE.Color(0xf5dcb0);
+  const sand = new THREE.Color(0x8a6238);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 10;
+    if (y > 0) c.lerpColors(horizon, sky, Math.pow(y, 0.6));
+    else c.lerpColors(horizon, sand, Math.min(1, -y * 3));
+    colors.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  envScene.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.2, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0d0 }));
+  sunDisc.position.set(-5, 7.5, 3.3);
+  envScene.add(sunDisc);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const target = pmrem.fromScene(envScene, 0.02);
+  pmrem.dispose();
+  geo.dispose();
+  return target.texture;
 }

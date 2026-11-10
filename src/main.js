@@ -5,6 +5,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnvironment } from './environment.js';
 import { XRManager } from './xr/XRManager.js';
 import { Revolver } from './weapons/Revolver.js';
+import { Holster } from './weapons/Holster.js';
+import { SoundFX } from './audio/SoundFX.js';
+import { ImpactFX } from './fx/ImpactFX.js';
 import { TargetManager } from './targets/TargetManager.js';
 
 // ---------------------------------------------------------------------------
@@ -50,19 +53,33 @@ orbit.update();
 // ---------------------------------------------------------------------------
 // Game systems
 // ---------------------------------------------------------------------------
-const environment = createEnvironment(scene);
+const environment = createEnvironment(scene, renderer);
 const xr = new XRManager(renderer, playerRig);
-const revolver = new Revolver();
 const targets = new TargetManager(scene);
+const sfx = new SoundFX();
+const impacts = new ImpactFX(scene);
+const holster = new Holster(scene, 'right');
+const colliders = [...environment.colliders];
+const revolver = new Revolver({
+  xr,
+  holster,
+  sfx,
+  impacts,
+  getColliders: () => {
+    colliders.length = environment.colliders.length;
+    colliders.push(...targets.colliders);
+    return colliders;
+  },
+});
 
-// Pass 1 sanity check: trigger gives a haptic tick so controller wiring can be
-// verified on-device. Replaced by the revolver's trigger logic in Pass 2.
-xr.addEventListener('selectstart', ({ hand }) => xr.pulse(hand, 0.6, 40));
+// Audio may only start after a user gesture: the ENTER VR click counts.
+window.addEventListener('pointerdown', () => sfx.unlock());
 xr.addEventListener('connected', ({ hand }) =>
   console.info(`[XR] ${hand.handedness} controller connected (${hand.inputSource.profiles[0] ?? 'unknown'})`),
 );
 
 renderer.xr.addEventListener('sessionstart', () => {
+  sfx.unlock();
   orbit.enabled = false;
   // The XR camera pose is absolute relative to the rig; clear the desktop offset.
   camera.position.set(0, 0, 0);
@@ -89,7 +106,8 @@ const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 1 / 30);
 
-  xr.update();
+  xr.update(dt);
+  holster.update(camera, dt);
   revolver.update(dt);
   targets.update(dt);
   environment.update(dt);
@@ -99,4 +117,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { scene, renderer, camera, playerRig, xr, revolver, targets };
+window.__game = { scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx };
