@@ -55,8 +55,8 @@ orbit.update();
 // ---------------------------------------------------------------------------
 const environment = createEnvironment(scene, renderer);
 const xr = new XRManager(renderer, playerRig);
-const targets = new TargetManager(scene);
 const sfx = new SoundFX();
+const targets = new TargetManager(scene, { sfx, camera });
 const impacts = new ImpactFX(scene);
 const holster = new Holster(scene, 'right');
 const colliders = [...environment.colliders];
@@ -71,6 +71,9 @@ const revolver = new Revolver({
     return colliders;
   },
 });
+
+// Every shot is scored (accuracy), and reacts with the target or surface it hit.
+revolver.addEventListener('shot', (shot) => targets.handleShot(shot));
 
 // Audio may only start after a user gesture: the ENTER VR click counts.
 window.addEventListener('pointerdown', () => sfx.unlock());
@@ -111,10 +114,11 @@ renderer.setAnimationLoop(() => {
   revolver.update(dt);
   targets.update(dt);
   environment.update(dt);
+  sfx.updateListener(camera);
   if (orbit.enabled) orbit.update();
 
   renderer.render(scene, camera);
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment };

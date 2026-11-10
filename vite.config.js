@@ -9,5 +9,5 @@ export default defineConfig({
   plugins: [basicSsl()],
   server: { host: true, https: true, port: 5173 },
   preview: { host: true, https: true, port: 4173 },
-  build: { target: 'es2022', sourcemap: true, chunkSizeWarningLimit: 800 },
+  build: { target: 'es2022', sourcemap: true, chunkSizeWarningLimit: 1000 },
 });

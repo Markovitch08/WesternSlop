@@ -19,7 +19,7 @@ certificate warning, then press **ENTER VR**. On desktop you can drag to orbit a
 https://markovitch08.github.io/WesternSlop/ : open it in the Meta Quest Browser and press **ENTER VR**.
 Every push to the deploy branch rebuilds and redeploys the site (`.github/workflows/pages.yml`).
 
-## Controls (Pass 2)
+## Controls
 
 | Action | Input |
 | --- | --- |
@@ -31,14 +31,30 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | Fire (cocked) | Light trigger pull |
 | Fire (double action) | Full, heavy trigger pull: the hammer rises with the trigger and drops at the break |
 
+## The range
+
+| Target | Where | Scoring |
+| --- | --- | --- |
+| Pop-up duelists | 4 outlaw cut-outs at 8–14 m. A bell rings and one springs up; you have 2.6 s to draw and fire | Head 100, heart ring 100, chest ring 70, body 40, hat 20, plus up to +100 for reaction time |
+| Steel gongs | 3 hanging plates at 13, 18 and 24 m (smaller plates further out). They ring and swing | 50 × precision (centre ring scores most) |
+| Glass bottles | 6 on a plank at 6 m, 3 on a crate at 19 m. They shatter and the row resets once it's cleared | 30 |
+| Red plate | Beside the scoreboard | Resets the score |
+
+Every score is multiplied by the distance factor 1 + distance / 15. The chalkboard on the left shows score,
+accuracy, headshots, duels won or missed, and best and average draw times. Each hit also shows a floating
+pop-up with points, zone, distance and reaction time.
+
 ## Test
 
 ```bash
 npm test
 ```
 
-This starts a Vite server, loads the game in headless Chromium, and drives fake XR controllers through
-grabbing, cocking, single and double action fire, dry fire, fanning, hand swaps and holstering. It needs the
+This starts a Vite server and runs each suite in `tests/suites/` in a fresh headless Chromium page with fake XR
+controllers. The revolver suite covers grabbing, cocking, single and double action fire, dry fire, fanning, hand
+swaps and holstering. The targets suite fires real shots at gongs, duelists, bottles and the reset plate, and
+checks zones, scores, duel timeouts, bottle respawns, surface impacts and the draw-call budget. Run one suite with
+`npm test -- targets`. It needs the
 `playwright` package and a Chromium build available to Node.
 
 ## Layout
@@ -46,17 +62,21 @@ grabbing, cocking, single and double action fire, dry fire, fanning, hand swaps 
 | File | Responsibility |
 | --- | --- |
 | `src/main.js` | Renderer, scene, player rig, WebXR session, render loop |
-| `src/environment.js` | Desert range, lighting and shadows (saloon, props and dust come in Pass 3) |
+| `src/environment.js` | Sky dome, drifting sun with shadows, sand, saloon, fences, barrels, cacti, mesas, dust motes |
 | `src/xr/XRManager.js` | Controller tracking and models, button polling with edge detection, raycasting, haptics |
 | `src/weapons/Revolver.js` | Revolver model, grip snapping, hammer/trigger/cylinder logic, raycast fire, recoil, flash, haptics |
 | `src/weapons/Holster.js` | Hip holster that follows the player's body |
-| `src/audio/SoundFX.js` | Web Audio synth: gunshot with echo, hammer and dry-fire clicks, holster thud |
+| `src/audio/SoundFX.js` | Web Audio synth: gunshot with echo, clicks, and positional steel, wood, glass, sand and bell sounds |
 | `src/fx/ImpactFX.js` | Pooled bullet-hole decals |
-| `src/targets/TargetManager.js` | Targets, hit zones and score (implemented in Pass 3) |
+| `src/targets/TargetManager.js` | Duel scheduler, scoring, shot routing, score UI |
+| `src/targets/Duelist.js`, `Gong.js`, `BottleGroup.js` | Target types: hit zones, reactions, physics |
+| `src/fx/ShardFX.js` | Instanced glass shards and wood splinters |
+| `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |
+| `src/util/` | Procedural canvas textures, geometry helpers |
 
 ## Roadmap
 
 1. ✅ Vite + Three.js scaffold, WebXR session, controller models
 2. ✅ Revolver: grip attachment, trigger and hammer, raycast fire, haptics
-3. Environment and targets: saloon, gongs, bottles, pop-ups, 3D scoreboard
+3. ✅ Environment and targets: saloon, gongs, bottles, pop-ups, 3D scoreboard
 4. Cylinder load and eject, recoil interpolation, sparks and smoke

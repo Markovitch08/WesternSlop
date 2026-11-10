@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/xr-sim.cjs"
+    "test": "node tests/run.cjs"
   },
   "dependencies": {
     "three": "^0.170.0"
