@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Western Slop — VR Shooting Range</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+      canvas { display: block; }
+      #info {
+        position: absolute; top: 12px; left: 12px; z-index: 10;
+        color: #f3e2c0; font: 13px/1.4 system-ui, sans-serif;
+        background: rgba(40, 24, 10, 0.65); padding: 8px 12px; border-radius: 6px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="info">Western Slop — press <b>ENTER VR</b> on a WebXR headset. Desktop: drag to orbit.</div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

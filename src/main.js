@@ -1,0 +1,102 @@
+import * as THREE from 'three';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+import { createEnvironment } from './environment.js';
+import { XRManager } from './xr/XRManager.js';
+import { Revolver } from './weapons/Revolver.js';
+import { TargetManager } from './targets/TargetManager.js';
+
+// ---------------------------------------------------------------------------
+// Renderer — tuned for standalone headsets (Quest 2/3 at 72–90 Hz).
+// ---------------------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
+renderer.xr.setFoveation(1); // fixed foveated rendering: big GPU win on Quest
+document.body.appendChild(renderer.domElement);
+document.body.appendChild(
+  VRButton.createButton(renderer, { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }),
+);
+
+// ---------------------------------------------------------------------------
+// Scene, camera and player rig. The rig is the player's origin in the world;
+// in XR the headset and controllers are tracked relative to it, so moving the
+// rig moves the player.
+// ---------------------------------------------------------------------------
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.02, 300);
+camera.position.set(0, 1.6, 0.5);
+
+const playerRig = new THREE.Group();
+playerRig.name = 'playerRig';
+playerRig.add(camera);
+scene.add(playerRig);
+
+// Desktop fallback: orbit around the range when not in VR.
+const orbit = new OrbitControls(camera, renderer.domElement);
+orbit.target.set(0, 1.3, -5);
+orbit.enableDamping = true;
+orbit.update();
+
+// ---------------------------------------------------------------------------
+// Game systems
+// ---------------------------------------------------------------------------
+const environment = createEnvironment(scene);
+const xr = new XRManager(renderer, playerRig);
+const revolver = new Revolver();
+const targets = new TargetManager(scene);
+
+// Pass 1 sanity check: trigger gives a haptic tick so controller wiring can be
+// verified on-device. Replaced by the revolver's trigger logic in Pass 2.
+xr.addEventListener('selectstart', ({ hand }) => xr.pulse(hand, 0.6, 40));
+xr.addEventListener('connected', ({ hand }) =>
+  console.info(`[XR] ${hand.handedness} controller connected (${hand.inputSource.profiles[0] ?? 'unknown'})`),
+);
+
+renderer.xr.addEventListener('sessionstart', () => {
+  orbit.enabled = false;
+  // The XR camera pose is absolute relative to the rig; clear the desktop offset.
+  camera.position.set(0, 0, 0);
+  camera.quaternion.identity();
+});
+renderer.xr.addEventListener('sessionend', () => {
+  orbit.enabled = true;
+  camera.position.set(0, 1.6, 0.5);
+  orbit.update();
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------------------------------------------------------------------------
+// Render loop. setAnimationLoop drives both the desktop rAF and the XR frame
+// loop. dt is clamped so a hitch (e.g. entering VR) doesn't explode physics.
+// ---------------------------------------------------------------------------
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 1 / 30);
+
+  xr.update();
+  revolver.update(dt);
+  targets.update(dt);
+  environment.update(dt);
+  if (orbit.enabled) orbit.update();
+
+  renderer.render(scene, camera);
+});
+
+// Exposed for debugging from the browser console / remote devtools.
+window.__game = { scene, renderer, camera, playerRig, xr, revolver, targets };

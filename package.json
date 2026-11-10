@@ -1,0 +1,19 @@
+{
+  "name": "western-slop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Semi-realistic WebXR Western shooting range (Three.js + Vite)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
+    "vite": "^6.4.6"
+  }
+}
