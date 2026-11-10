@@ -14,6 +14,11 @@ The dev server uses HTTPS with a self-signed certificate, because WebXR needs a 
 listens on your LAN. On the Quest, open `https://<your-pc-ip>:5173` in the Meta Quest Browser, accept the
 certificate warning, then press **ENTER VR**. On desktop you can drag to orbit around the scene.
 
+## Play online
+
+https://markovitch08.github.io/WesternSlop/ : open it in the Meta Quest Browser and press **ENTER VR**.
+Every push to the deploy branch rebuilds and redeploys the site (`.github/workflows/pages.yml`).
+
 ## Controls (Pass 2)
 
 | Action | Input |
