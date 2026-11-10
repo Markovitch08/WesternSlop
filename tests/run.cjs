@@ -18,6 +18,7 @@ const SUITES = {
   reload: require('./suites/reload.cjs'),
   duel: require('./suites/duel.cjs'),
   atmosphere: require('./suites/atmosphere.cjs'),
+  modes: require('./suites/modes.cjs'),
 };
 
 (async () => {

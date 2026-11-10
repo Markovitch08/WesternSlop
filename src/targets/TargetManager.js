@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Duelist } from './Duelist.js';
 import { Gong } from './Gong.js';
 import { BottleGroup } from './BottleGroup.js';
+import { PlateRack } from './PlateRack.js';
 import { ShardFX } from '../fx/ShardFX.js';
 import { FloatingText } from '../ui/FloatingText.js';
 import { Scoreboard } from '../ui/Scoreboard.js';
@@ -15,7 +16,7 @@ const BELL_POSITION = new THREE.Vector3(0, 1.0, -0.8);
 const DUELIST_SPOTS = [[-3, -8], [-0.8, -11.5], [1.6, -9], [3.8, -14]];
 const GONG_SPOTS = [[-5.5, -13, 0.25], [5.5, -18, 0.2], [0.6, -24, 0.15]];
 
-const DUEL_GAP = [1.5, 4.0]; // random pause between duels, seconds
+const POPUP_GAP = [1.5, 4.0]; // default random pause between pop-ups, seconds
 
 const SCORE_COLORS = { head: '#ff6b4a', heart: '#ffd36b', center: '#ffd36b' };
 
@@ -46,6 +47,7 @@ export class TargetManager extends THREE.EventDispatcher {
 
     this.shards = new ShardFX(scene);
     this.text = new FloatingText(scene);
+    this.text.camera = camera;
     this.scoreboard = new Scoreboard(scene);
 
     this.staticColliders = [...this.scoreboard.colliders];
@@ -100,13 +102,24 @@ export class TargetManager extends THREE.EventDispatcher {
     // Shooting the black DUEL plate starts quick-draw duel mode (see DuelMode).
     this.duelPlate = this.#buildPlate(new THREE.Vector3(-0.9, 0, -4.2), { type: 'duelStart', color: 0x1c1a18, name: 'duelPlate', label: 'DUEL' });
 
-    for (const t of [...this.duelists, ...this.gongs]) this.staticColliders.push(...t.staticColliders);
-    this.targets = [...this.duelists, ...this.gongs, ...this.bottleGroups, this.resetPlate, this.duelPlate];
+    // --- Knock-down steel plate rack (home practice) ---
+    this.plateRack = new PlateRack(new THREE.Vector3(6.0, 0, -9), FIRING_LINE);
+    this.plateRack.onReset = (pos) => this.sfx.clack(pos);
+    this.root.add(this.plateRack.object);
+
+    // Orange POP-UP plate: starts the timed pop-up outlaw mode (see PopupMode).
+    this.popupPlate = this.#buildPlate(new THREE.Vector3(-0.2, 0, -4.0), { type: 'popupStart', color: 0xd9822b, name: 'popupPlate', label: 'POP-UP' });
+
+    for (const t of [...this.gongs, this.plateRack]) this.staticColliders.push(...t.staticColliders);
+    this.targets = [...this.duelists, ...this.gongs, ...this.bottleGroups, this.plateRack,
+      this.resetPlate, this.duelPlate, this.popupPlate];
 
     this.#registerPhysics();
 
     this.time = 0;
-    this.duelEnabled = true;
+    /** Random pop-ups run only inside the pop-up game mode; home is static practice. */
+    this.duelEnabled = false;
+    this.popupGap = [...POPUP_GAP];
     this.duel = { phase: 'wait', timer: 3, active: null, last: null };
     this._colliders = [];
     this.resetStats();
@@ -167,6 +180,14 @@ export class TargetManager extends THREE.EventDispatcher {
   }
 
   #score(result, hit, shot, target) {
+    if (result.type === 'popupStart') {
+      this.sfx.steelPing(hit.point, 0.12);
+      this.text.spawn(hit.point, ['POP-UPS!'], '#ffb060');
+      const report = { type: 'popupStart' };
+      this.dispatchEvent({ type: 'popupStart' });
+      this.dispatchEvent({ type: 'hit', report });
+      return report;
+    }
     if (result.type === 'duelStart') {
       this.sfx.steelPing(hit.point, 0.12);
       this.text.spawn(hit.point, ['DUEL!'], '#ffd36b');
@@ -186,7 +207,7 @@ export class TargetManager extends THREE.EventDispatcher {
 
     const distance = shot.origin.distanceTo(hit.point);
     const distFactor = 1 + distance / 15;
-    const precisionFactor = result.type === 'gong' ? 0.5 + 0.5 * result.precision : 1;
+    const precisionFactor = result.type === 'gong' || result.type === 'plate' ? 0.5 + 0.5 * result.precision : 1;
     const reactionBonus = result.reaction != null
       ? Math.round(100 * THREE.MathUtils.clamp(1 - (result.reaction - 0.35) / 1.65, 0, 1))
       : 0;
@@ -205,6 +226,8 @@ export class TargetManager extends THREE.EventDispatcher {
       this.sfx.woodHit(hit.point);
     } else if (result.type === 'gong') {
       this.sfx.steelPing(hit.point, target.radius);
+    } else if (result.type === 'plate') {
+      this.sfx.steelPing(hit.point, 0.1);
     }
 
     const report = {
@@ -223,6 +246,19 @@ export class TargetManager extends THREE.EventDispatcher {
   // -------------------------------------------------------------------------
   // Duels
   // -------------------------------------------------------------------------
+
+  /** Show or hide the cardboard outlaws (game modes turn them on). */
+  setDuelistsActive(active) {
+    for (const d of this.duelists) d.setActive(active);
+    if (!active && this.duel) {
+      this.duel.phase = 'wait';
+      this.duel.active = null;
+    }
+  }
+
+  get duelistsActive() {
+    return this.duelists.some((d) => d.active);
+  }
 
   /** Pop up duelist `i` now (debugging and tests). */
   forcePopup(i) {
@@ -263,7 +299,7 @@ export class TargetManager extends THREE.EventDispatcher {
       this.duel.phase = 'wait';
       this.duel.active = null;
       this.duel.last = duelist;
-      this.duel.timer = DUEL_GAP[0] + Math.random() * (DUEL_GAP[1] - DUEL_GAP[0]);
+      this.duel.timer = this.popupGap[0] + Math.random() * (this.popupGap[1] - this.popupGap[0]);
     }
   }
 
@@ -298,19 +334,34 @@ export class TargetManager extends THREE.EventDispatcher {
   #registerPhysics() {
     const P = this.physics;
     for (const m of [...this.scoreboard.colliders.slice(0, 2), ...this.propMeshes]) P.addStaticFromMesh(m);
-    for (const pl of [this.resetPlate, this.duelPlate]) {
+    for (const pl of [this.resetPlate, this.duelPlate, this.popupPlate]) {
       P.addStaticFromMesh(pl.post);
       P.addStaticFromMesh(pl.plate, { onGunImpact: (speed, point) => this.sfx.steelPing(point, 0.12) });
     }
 
     for (const d of this.duelists) {
-      P.addStaticFromMesh(d.staticColliders[0]);
-      P.addFollower(d.board, {
-        onGunImpact: (speed) => {
-          if (speed > 1.2 && d.knock()) this.sfx.woodHit(d.headPosition());
-        },
-      });
+      d.physics = P;
+      d.bodies = [
+        P.addStaticFromMesh(d.stand),
+        P.addFollower(d.board, {
+          onGunImpact: (speed) => {
+            if (speed > 1.2 && d.knock()) this.sfx.woodHit(d.headPosition());
+          },
+        }),
+      ];
     }
+    // Home is static practice: the cardboard outlaws only appear in a game mode.
+    this.setDuelistsActive(false);
+
+    const rack = this.plateRack;
+    rack.object.updateWorldMatrix(true, false);
+    const rackQ = rack.object.getWorldQuaternion(new THREE.Quaternion());
+    for (const [c, h] of rack.frameParts) P.addStaticBox(rack.object.localToWorld(c.clone()), h, rackQ);
+    rack.plates.forEach((p, i) => P.addFollower(p.mesh, {
+      onGunImpact: (speed, point) => {
+        if (speed > 1 && rack.knock(i)) this.sfx.steelPing(point, 0.1);
+      },
+    }));
 
     const q = new THREE.Quaternion();
     for (const g of this.gongs) {

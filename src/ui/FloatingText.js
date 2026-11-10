@@ -6,8 +6,9 @@ const _cam = new THREE.Vector3();
 
 /**
  * Pool of score pop-ups ("+180 / HEADSHOT / 12.4 m · 0.48 s") that rise from
- * the hit point and fade. Each sprite scales with distance so it stays
- * readable at 25 m.
+ * the hit point and fade. Each is a flat panel turned to face the player once,
+ * when it appears, and then fixed in the world (a billboard that follows your
+ * head is uncomfortable in VR). Sized by distance so it reads at 25 m.
  */
 export class FloatingText {
   constructor(scene, count = 6) {
@@ -16,8 +17,8 @@ export class FloatingText {
     for (let i = 0; i < count; i++) {
       const [canvas, ctx] = makeCanvas(512, 256);
       const texture = canvasToTexture(canvas, { repeat: false });
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: texture, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false,
+      const sprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.5), new THREE.MeshBasicMaterial({
+        map: texture, transparent: true, depthWrite: false, fog: false, toneMapped: false, side: THREE.DoubleSide,
       }));
       sprite.renderOrder = 10;
       sprite.visible = false;
@@ -54,6 +55,13 @@ export class FloatingText {
     item.texture.needsUpdate = true;
     item.sprite.position.copy(position);
     item.sprite.position.y += 0.25;
+    // Face the player once (yaw only), then stay fixed in the world.
+    if (this.camera) {
+      this.camera.getWorldPosition(_cam);
+      item.sprite.lookAt(_cam.x, item.sprite.position.y, _cam.z);
+      const w = Math.max(0.5, item.sprite.position.distanceTo(_cam) * 0.14);
+      item.sprite.scale.set(w, w, 1);
+    }
     item.sprite.visible = true;
     item.sprite.material.opacity = 1;
     item.age = 0;
@@ -62,7 +70,7 @@ export class FloatingText {
   }
 
   update(dt, camera) {
-    camera.getWorldPosition(_cam);
+    this.camera = camera;
     for (const item of this.items) {
       if (!item.alive) continue;
       item.age += dt;
@@ -74,8 +82,6 @@ export class FloatingText {
       }
       s.position.y += dt * 0.35;
       s.material.opacity = 1 - THREE.MathUtils.smoothstep(item.age, LIFETIME * 0.6, LIFETIME);
-      const w = Math.max(0.5, s.position.distanceTo(_cam) * 0.14);
-      s.scale.set(w, w / 2, 1);
     }
   }
 }

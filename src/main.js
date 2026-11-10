@@ -16,6 +16,7 @@ import { CasingFX } from './fx/CasingFX.js';
 import { AmmoPouch } from './weapons/AmmoPouch.js';
 import { DuelHUD } from './ui/DuelHUD.js';
 import { DuelMode } from './game/DuelMode.js';
+import { PopupMode } from './game/PopupMode.js';
 import { TargetManager } from './targets/TargetManager.js';
 
 // ---------------------------------------------------------------------------
@@ -98,8 +99,13 @@ const revolver = new Revolver({
 const pouch = new AmmoPouch(scene, xr, sfx, () => revolver.roundsWanted, 'left');
 revolver.pouch = pouch;
 
-// Quick-draw duel mode: shoot the black DUEL plate to start.
-const duel = new DuelMode({ targets, revolver, sfx, xr, fx, camera, hud: new DuelHUD(scene, camera) });
+// Game modes, one at a time. Home is static practice (bottles, gongs, plate
+// rack, tumbleweeds). Shoot the black DUEL plate for quick-draw duels, or the
+// orange POP-UP plate for timed pop-up outlaws.
+const modes = { current: null };
+const hud = new DuelHUD(scene, camera);
+const duel = new DuelMode({ targets, revolver, sfx, xr, fx, camera, hud, modes });
+const popups = new PopupMode({ targets, revolver, sfx, hud, modes });
 
 // Every shot is scored (accuracy), and reacts with the target or surface it hit.
 revolver.addEventListener('shot', (shot) => targets.handleShot(shot));
@@ -148,6 +154,7 @@ renderer.setAnimationLoop(() => {
   revolver.update(dt);
   casings.update(dt);
   fx.update(dt);
+  popups.update(dt);
   duel.update(dt);
   atmosphere.update(dt, camera);
   sfx.updateListener(camera);
@@ -158,4 +165,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, atmosphere, audio };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio };

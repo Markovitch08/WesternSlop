@@ -145,5 +145,6 @@ module.exports = async function duelSuite() {
   check('summary after a loss', await until(() => duel.state === 'summary', 200) && duel.hud.text === '1 / 5', duel.hud.text);
   check('back to free play', await until(() => duel.state === 'idle', 300) && !duel.hud.sprite.visible);
   check('free-range pop-ups restored', tm.duelEnabled === true);
+  check('outlaws packed away after the duel', tm.duelists.every((d) => !d.active && !d.object.visible));
   return out;
 };

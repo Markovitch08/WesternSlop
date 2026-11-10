@@ -13,8 +13,8 @@ import { RevolverState } from '../weapons/Revolver.js';
  *              signal to the hit.
  *   result     a couple of seconds to read the outcome
  * Touching the gun before "DRAW!" is a foul: the round restarts.
- * Losing a round ends the run; beating all outlaws wins it. Free-range random
- * pop-ups are paused while a duel runs.
+ * Losing a round ends the run; beating all outlaws wins it. The cardboard
+ * outlaws are only shown while a duel (or the pop-up mode) runs.
  */
 export const DuelState = Object.freeze({
   IDLE: 'idle',
@@ -49,9 +49,9 @@ export class DuelMode extends THREE.EventDispatcher {
    * @param {import('../fx/ParticleFX.js').ParticleFX} [deps.fx]
    * @param {THREE.Camera} deps.camera
    */
-  constructor({ targets, revolver, sfx, xr, hud, fx = null, camera }) {
+  constructor({ targets, revolver, sfx, xr, hud, fx = null, camera, modes = { current: null } }) {
     super();
-    Object.assign(this, { targets, revolver, sfx, xr, hud, fx, camera });
+    Object.assign(this, { targets, revolver, sfx, xr, hud, fx, camera, modes });
     this.state = DuelState.IDLE;
     this.timer = 0;
     this.round = 0;
@@ -84,9 +84,11 @@ export class DuelMode extends THREE.EventDispatcher {
   }
 
   start() {
-    if (this.active) return;
+    if (this.active || this.modes.current) return; // one game mode at a time
+    this.modes.current = this;
     this.freeRangeWasEnabled = this.targets.duelEnabled;
     this.targets.duelEnabled = false;
+    this.targets.setDuelistsActive(true);
     this.round = 0;
     this.results = [];
     this.fouls = 0;
@@ -102,6 +104,8 @@ export class DuelMode extends THREE.EventDispatcher {
     this.state = DuelState.IDLE;
     this.hud.hide();
     this.targets.duelEnabled = this.freeRangeWasEnabled;
+    this.targets.setDuelistsActive(false); // back to static practice
+    if (this.modes.current === this) this.modes.current = null;
     this.dispatchEvent({ type: 'end', results: this.results });
   }
 

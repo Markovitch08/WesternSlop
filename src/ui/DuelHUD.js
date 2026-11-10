@@ -2,22 +2,26 @@ import * as THREE from 'three';
 import { makeCanvas, canvasToTexture } from '../util/canvasTextures.js';
 
 /**
- * Big world-space sign floating over the range for duel mode: round number,
- * prompts, the 3-2-1 countdown, "DRAW!" and results. Also owns the red
- * "you've been shot" flash that sits around the player's head.
+ * Big sign fixed in the world over the range, used by the game modes: round
+ * numbers, prompts, the 3-2-1 countdown, "DRAW!", timers and results. It is a
+ * flat panel facing the firing line (not a billboard sprite), so in VR it
+ * stays put while you look around. Also owns the red "you've been shot" flash
+ * around the player's head.
  */
 export class DuelHUD {
   /**
    * @param {THREE.Scene} scene
    * @param {THREE.Camera} camera
    */
-  constructor(scene, camera, position = new THREE.Vector3(0, 3.6, -9)) {
+  constructor(scene, camera, position = new THREE.Vector3(0, 3.6, -9), faceTowards = new THREE.Vector3(0, 1.6, 0)) {
     [this.canvas, this.ctx] = makeCanvas(1024, 448);
     this.texture = canvasToTexture(this.canvas, { repeat: false });
-    this.sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: this.texture, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false,
-    }));
+    this.sprite = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false, fog: false, toneMapped: false }),
+    );
     this.sprite.position.copy(position);
+    this.sprite.lookAt(faceTowards); // fixed orientation, chosen once
     this.baseScale = new THREE.Vector2(4.4, 1.925);
     this.sprite.scale.set(this.baseScale.x, this.baseScale.y, 1);
     this.sprite.renderOrder = 11;

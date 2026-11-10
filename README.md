@@ -41,17 +41,28 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 
 ## The range
 
+**Home** is static target practice. There are no pop-ups, and you shoot at your own pace:
+
 | Target | Where | Scoring |
 | --- | --- | --- |
-| Pop-up duelists | 4 outlaw cut-outs at 8–14 m. A bell rings and one springs up; you have 2.6 s to draw and fire | Head 100, heart ring 100, chest ring 70, body 40, hat 20, plus up to +100 for reaction time |
-| Steel gongs | 3 hanging plates at 13, 18 and 24 m (smaller plates further out). They ring and swing | 50 × precision (centre ring scores most) |
 | Glass bottles | 6 on a plank at 6 m, 3 on a crate at 19 m. They shatter and the row resets once it's cleared | 30 |
-| Red plate | Beside the scoreboard | Resets the score |
-| Black DUEL plate | Next to the red plate | Starts quick-draw duel mode (below) |
+| Steel gongs | 3 hanging plates at 13, 18 and 24 m (smaller further out). They ring and swing | 50 × precision |
+| Plate rack | 5 knock-down steel plates on a rack at about 11 m, right of the range. They spring back up when all are down | 40 × precision |
+| Tumbleweeds | Rolling across the range on the wind. Shooting one knocks it along | — |
 
 Every score is multiplied by the distance factor 1 + distance / 15. The chalkboard on the left shows score,
-accuracy, headshots, duels won or missed, and best and average draw times. Each hit also shows a floating
-pop-up with points, zone, distance and reaction time.
+accuracy and draw times, and each hit shows a floating pop-up with points, zone, distance and time.
+
+Three plates by the firing line pick the **game mode**. Only one runs at a time, and each returns to home when
+it ends:
+
+| Plate | Mode |
+| --- | --- |
+| Orange **POP-UP** | 45 seconds of cardboard outlaws springing up at random, after a 3-2-1 countdown. Head and heart rings are worth 100, chest 70, body 40, hat 20, plus up to +100 for a fast hit. The sign shows the clock and your score, then a summary |
+| Black **DUEL** | Quick-draw duels against five outlaws (below) |
+| Red | Resets the scoreboard |
+
+The cardboard outlaws only appear while a mode is running.
 
 ## Atmosphere and sound
 
@@ -88,7 +99,7 @@ Shoot the black **DUEL** plate to take on five outlaws in a row, each faster on 
 
 Touching your gun before "DRAW!" is **JUMPED THE GUN**: holster again to restart the round. Losing a round ends
 the run with a summary of outlaws beaten and your best draw; beat all five to be the **FASTEST GUN** in the West.
-Random free-range pop-ups pause during a duel and come back afterwards.
+The outlaws pack away when the duel ends.
 
 ## Test
 
@@ -132,7 +143,9 @@ Tests run Chromium with autoplay allowed so the audio graph really runs. Run one
 | `src/fx/CasingFX.js` | Ejected brass cases as rigid bodies (instanced) |
 | `src/fx/ShardFX.js` | Instanced glass shards and wood splinters |
 | `src/game/DuelMode.js` | Quick-draw duel mode: round flow, countdown, fouls, outlaw ladder |
-| `src/ui/DuelHUD.js` | Duel sign over the range and the red hit flash |
+| `src/game/PopupMode.js` | Timed pop-up outlaw mode |
+| `src/targets/PlateRack.js` | Knock-down steel plate rack |
+| `src/ui/DuelHUD.js` | Game-mode sign fixed over the range, and the red hit flash |
 | `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |
 | `src/util/` | Procedural canvas textures, geometry helpers |
 

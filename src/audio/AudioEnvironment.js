@@ -46,6 +46,17 @@ export class AudioEnvironment {
   unlock() {
     if (this.unlocked) return;
     if (!this.listener) {
+      // A "balanced" output buffer: the default lowest-latency setting
+      // underruns (audible hitches) on standalone headsets when the GPU is busy.
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        const current = THREE.AudioContext.getContext();
+        const offline = typeof OfflineAudioContext !== 'undefined' && current instanceof OfflineAudioContext;
+        if (!offline && current.state !== 'running') {
+          current.close?.();
+          THREE.AudioContext.setContext(new Ctx({ latencyHint: 'balanced' }));
+        }
+      } catch { /* keep three's default context */ }
       this.listener = new THREE.AudioListener();
       this.camera.add(this.listener);
       this.ctx = this.listener.context;
@@ -119,13 +130,20 @@ export class AudioEnvironment {
       this.scene.add(emitter);
       this.echoes.push({ reflector: r, emitter, delay, lp, gain });
     }
-    this.#retuneEchoes();
+    this.#retuneEchoes(true);
   }
 
-  /** Delay, level and air absorption for each echo from where the player stands. */
-  #retuneEchoes() {
+  /**
+   * Delay, level and air absorption for each echo from where the player
+   * stands. Only when the head has moved a fair way: changing a delay line
+   * every frame both floods the audio thread with automation events and
+   * bends the pitch of anything passing through it.
+   */
+  #retuneEchoes(force = false) {
     if (!this.echoes.length) return;
     this.camera.getWorldPosition(_head);
+    if (!force && this.tunedAt && _head.distanceTo(this.tunedAt) < 0.5) return;
+    this.tunedAt = (this.tunedAt ?? new THREE.Vector3()).copy(_head);
     const t = this.ctx.currentTime;
     for (const e of this.echoes) {
       const path = 2 * _head.distanceTo(e.reflector.position); // out and back
@@ -143,9 +161,9 @@ export class AudioEnvironment {
     const ctx = this.ctx;
     const sr = ctx.sampleRate;
 
-    // Canyon wind: 6 s of brown noise (seamlessly looped), low-passed, its level
+    // Canyon wind: 4 s of brown noise (seamlessly looped), low-passed, its level
     // and brightness following the gusts.
-    const windBuf = loopBuffer(ctx, 6, (n) => {
+    const windBuf = loopBuffer(ctx, 4, (n) => {
       const d = new Float32Array(n);
       let b = 0;
       for (let i = 0; i < n; i++) {
@@ -179,9 +197,9 @@ export class AudioEnvironment {
     whistle.play();
     this.layers.whistle = whistle;
 
-    // Crickets: an 8 s loop of chirp trains at a few pitches, panned wide.
+    // Crickets: a 6 s loop of chirp trains at a few pitches, panned wide.
     const crickets = new THREE.Audio(this.listener);
-    crickets.setBuffer(cricketBuffer(ctx, 8));
+    crickets.setBuffer(cricketBuffer(ctx, 6));
     crickets.setLoop(true);
     crickets.setVolume(0.05);
     crickets.play();
@@ -232,7 +250,11 @@ export class AudioEnvironment {
   update(dt, wind = null) {
     if (!this.unlocked) return;
     const t = this.ctx.currentTime;
-    if (wind) {
+    // Ambient parameters change slowly: retune them 10 times a second, not
+    // every frame, to keep the audio thread's automation queue short.
+    this.paramTimer = (this.paramTimer ?? 0) - dt;
+    if (wind && this.paramTimer <= 0) {
+      this.paramTimer = 0.1;
       const g = wind.gust;
       this.layers.wind.gain.gain.setTargetAtTime(0.18 + g * 0.45, t, 0.4);
       this.windFilter.frequency.setTargetAtTime(280 + g * 650, t, 0.4);

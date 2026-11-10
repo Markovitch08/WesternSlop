@@ -103,7 +103,7 @@ export class Scoreboard {
     g.fillText(lastLine, 60, 575);
     g.fillStyle = 'rgba(239,232,214,0.6)';
     g.font = 'italic 30px Georgia, serif';
-    g.fillText('Shoot the red plate to reset', 60, 650);
+    g.fillText('Plates: red resets · black DUEL · orange POP-UPS', 60, 650);
 
     this.texture.needsUpdate = true;
     this.redraws++;

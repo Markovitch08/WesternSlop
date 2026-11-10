@@ -134,7 +134,13 @@ export class Duelist {
     this.board.name = 'duelistBoard';
     this.hinge.add(this.board);
 
-    this.staticColliders = [stand];
+    this.stand = stand;
+    this.staticColliders = [];
+    /** Shown and shootable only while a game mode uses the duelists. */
+    this.active = true;
+    /** Physics bodies (stand, board) — removed from the world while inactive. */
+    this.bodies = [];
+    this.physics = null;
     this.state = 'down'; // down | rising | up | falling
     this.angle = DOWN_ANGLE;
     this.angVel = 0;
@@ -146,7 +152,24 @@ export class Duelist {
   }
 
   activeColliders() {
-    return [this.board];
+    return this.active ? [this.board, this.stand] : [];
+  }
+
+  /** Show (active) or hide the duelist, its stand and its physics bodies. */
+  setActive(active) {
+    if (active === this.active) return;
+    this.active = active;
+    this.object.visible = active;
+    if (!active) {
+      this.state = 'down';
+      this.angle = DOWN_ANGLE;
+      this.angVel = 0;
+      this.hinge.rotation.x = this.angle;
+    }
+    for (const b of this.bodies) {
+      if (active) this.physics?.addBody(b);
+      else this.physics?.removeBody(b);
+    }
   }
 
   /** World position of the head centre (for UI pop-ups). */
@@ -159,7 +182,7 @@ export class Duelist {
   }
 
   popUp(now) {
-    if (this.state !== 'down') return false;
+    if (this.state !== 'down' || !this.active) return false;
     this.state = 'rising';
     this.stateTime = 0;
     this.popTime = now;

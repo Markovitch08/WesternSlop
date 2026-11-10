@@ -8,6 +8,9 @@ module.exports = async function targetsSuite() {
   const g = window.__game;
   const { THREE, targets: tm, revolver: rev, xr, holster, sfx, environment: env } = g;
   tm.duelEnabled = false;
+  // Home hides the cardboard outlaws (they belong to the game modes); this
+  // suite tests them directly, so switch them on.
+  tm.setDuelistsActive(true);
 
   const out = [];
   const check = (name, ok, detail = '') => {

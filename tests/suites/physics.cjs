@@ -9,6 +9,7 @@ module.exports = async function physicsSuite() {
   const g = window.__game;
   const { THREE, targets: tm, revolver: rev, xr, holster, sfx, physics } = g;
   tm.duelEnabled = false;
+  tm.setDuelistsActive(true); // the knock-over test needs an outlaw
 
   const out = [];
   const check = (name, ok, detail = '') => {
