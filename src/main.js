@@ -20,6 +20,7 @@ import { PopupMode } from './game/PopupMode.js';
 import { TargetManager } from './targets/TargetManager.js';
 import { Settings } from './game/Settings.js';
 import { SettingsBoard } from './ui/SettingsBoard.js';
+import { PerfMeter } from './ui/PerfMeter.js';
 
 // ---------------------------------------------------------------------------
 // Renderer — tuned for standalone headsets (Quest 2/3 at 72–90 Hz).
@@ -122,7 +123,9 @@ audio.installUnlockHandlers(renderer, xr);
 // Settings: a board beside the bench (point an empty hand + trigger, or click).
 // ---------------------------------------------------------------------------
 const settings = new Settings();
-const settingsBoard = new SettingsBoard(scene, settings, ['handedness', 'turning', 'sfxVolume', 'ambienceVolume', 'quality']);
+const settingsBoard = new SettingsBoard(scene, settings, ['handedness', 'turning', 'sfxVolume', 'ambienceVolume', 'quality', 'perfMeter']);
+// Performance meter: a watch on the off-hand wrist (fps, frame times, draw calls).
+const perf = new PerfMeter(renderer);
 staticColliders.push(...settingsBoard.colliders);
 colliders.length = 0;
 colliders.push(...staticColliders);
@@ -134,6 +137,7 @@ settings.addEventListener('change', ({ key, value }) => {
   } else if (key === 'sfxVolume') sfx.setVolume(value);
   else if (key === 'ambienceVolume') audio.setAmbience(value);
   else if (key === 'quality') atmosphere.setQuality(value, renderer);
+  else if (key === 'perfMeter') perf.enabled = value;
 });
 settings.applyAll();
 xr.addEventListener('selectstart', ({ hand }) => {
@@ -201,7 +205,10 @@ window.addEventListener('resize', () => {
 const clock = new THREE.Clock();
 
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 1 / 30);
+  const rawDt = clock.getDelta();
+  const dt = Math.min(rawDt, 1 / 30);
+  perf.attach(xr.getHand(settings.get('handedness') === 'right' ? 'left' : 'right'));
+  perf.update(rawDt);
 
   xr.update(dt);
   updateTurning(dt);
@@ -223,4 +230,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf };

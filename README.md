@@ -51,6 +51,7 @@ desktop). Settings are saved on the device.
 | Effects volume | 0–100% |
 | Ambience volume | 0–100% |
 | Quality | High (2048 soft shadows, lantern shadow, 800 dust motes), Medium (1024, no lantern shadow, 500) or Low (512, 250) |
+| Performance meter | A watch on your off-hand wrist: fps (green ≥ 70, amber ≥ 60, red below), average and worst frame time over the last second, and draw calls |
 
 ## The range
 
@@ -161,6 +162,7 @@ must be disconnected once the sound is over. Run one suite with
 | `src/game/PopupMode.js` | Timed pop-up outlaw mode |
 | `src/targets/PlateRack.js` | Knock-down steel plate rack |
 | `src/game/Settings.js`, `src/ui/SettingsBoard.js` | Saved player settings and the in-world board |
+| `src/ui/PerfMeter.js` | Wrist performance meter |
 | `src/ui/DuelHUD.js` | Game-mode sign fixed over the range, and the red hit flash |
 | `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |
 | `src/util/` | Procedural canvas textures, geometry helpers |

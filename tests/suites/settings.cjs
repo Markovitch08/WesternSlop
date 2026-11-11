@@ -139,10 +139,24 @@ module.exports = async function settingsSuite() {
   rgp.axes[2] = 1; await frames(5); rgp.axes[2] = 0;
   check('turning off: no turn', settings.get('turning') === 'off' && playerRig.rotation.y === y2);
 
+  // --- Performance meter -------------------------------------------------------------
+  const perf = g.perf;
+  check('performance meter off by default', !perf.object.visible);
+  await press('perfMeter', 1);
+  await frames(30);
+  check('meter on: a watch on the off-hand (left) wrist', settings.get('perfMeter') === true && perf.object.visible && perf.object.parent === L.grip);
+  check('meter measures fps and frame times', perf.fps > 1 && perf.avgMs > 0 && perf.worstMs >= perf.avgMs,
+    `${perf.fps.toFixed(1)} fps, ${perf.avgMs.toFixed(1)} / ${perf.worstMs.toFixed(1)} ms`);
+  await press('handedness', 1);
+  await frames(3);
+  check('left-handed: the meter moves to the right wrist', perf.object.parent === R.grip);
+  await press('handedness', -1);
+  await frames(3);
+
   // --- Persistence ------------------------------------------------------------------
   const { Settings } = await import('/src/game/Settings.js');
   const reloaded = new Settings();
-  check('settings come back on the next load', reloaded.get('turning') === 'off' && reloaded.get('quality') === 'high' &&
+  check('settings come back on the next load', reloaded.get('turning') === 'off' && reloaded.get('quality') === 'high' && reloaded.get('perfMeter') === true &&
     Math.abs(reloaded.get('sfxVolume') - 0.7) < 1e-9);
   return out;
 };
