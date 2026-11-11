@@ -25,6 +25,7 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | --- | --- |
 | Draw / hold the revolver | Hold the **grip** button with your hand at your right hip, where the holster is. The gun only stays in your hand while you keep holding grip |
 | Swap hands | Squeeze the other hand's grip near the gun |
+| Dual wield | Turn on **Second gun** on the settings board, then draw one from each hip. Duels need both holstered, and touching either before DRAW! is a foul |
 | Holster | Let go of the grip with the gun at your hip |
 | Drop / throw | Let go anywhere else: the gun is a rigid body, so it falls, clatters and keeps your hand's momentum. A thrown gun breaks bottles, rings gongs and knocks over duelists (no score) |
 | Pick up | Grip button near the gun, wherever it landed |
@@ -47,6 +48,7 @@ desktop). Settings are saved on the device.
 | Setting | Choices |
 | --- | --- |
 | Handedness | Right or left: the holster goes on your gun hand's hip, the cartridge pouch on the other |
+| Second gun | Off or on: a second revolver in a holster on your other hip, for dual wielding. The cartridge pouch moves to the front of your belt. Holster one gun to free a hand for reloading |
 | Turning | Off, snap 30° or smooth, on either thumbstick (left/right). Turns around your head |
 | Effects volume | 0–100% |
 | Ambience volume | 0–100% |

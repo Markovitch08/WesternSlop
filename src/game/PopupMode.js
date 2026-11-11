@@ -27,9 +27,10 @@ export class PopupMode extends THREE.EventDispatcher {
    * @param {import('../ui/DuelHUD.js').DuelHUD} deps.hud shared sign over the range
    * @param {{ current: object|null }} deps.modes one game mode at a time
    */
-  constructor({ targets, revolver, sfx, hud, modes }) {
+  constructor({ targets, revolver, guns = null, sfx, hud, modes }) {
     super();
     Object.assign(this, { targets, revolver, sfx, hud, modes });
+    this.guns = guns ?? [revolver];
     this.state = PopupState.IDLE;
     this.duration = 45; // seconds of play
     this.gap = [0.6, 1.8]; // pause between pop-ups during the mode
@@ -47,9 +48,11 @@ export class PopupMode extends THREE.EventDispatcher {
     targets.addEventListener('duelResolved', ({ outcome }) => {
       if (this.state === PopupState.PLAY && outcome === 'timeout') this.score.missed++;
     });
-    revolver.addEventListener('shot', () => {
-      if (this.state === PopupState.PLAY) this.score.shots++;
-    });
+    for (const gun of this.guns) {
+      gun.addEventListener('shot', () => {
+        if (this.state === PopupState.PLAY) this.score.shots++;
+      });
+    }
   }
 
   #reset() {

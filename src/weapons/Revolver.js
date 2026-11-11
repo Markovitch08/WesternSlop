@@ -154,6 +154,8 @@ export class Revolver extends THREE.EventDispatcher {
     this.#buildModel();
 
     this.state = RevolverState.HOLSTERED;
+    /** A disabled gun (the optional second gun, switched off) is hidden and can't be grabbed. */
+    this.enabled = true;
     /** @type {import('../xr/XRManager.js').Hand|null} */
     this.hand = null;
 
@@ -373,7 +375,7 @@ export class Revolver extends THREE.EventDispatcher {
   }
 
   #onSqueezeStart(hand) {
-    if (hand.held || this.hand === hand) return;
+    if (!this.enabled || hand.held || this.hand === hand) return;
     hand.grip.updateWorldMatrix(true, false);
     this.object.getWorldPosition(_v1);
     if (_v1.distanceTo(hand.position) > GRAB_RADIUS) return;
@@ -453,6 +455,28 @@ export class Revolver extends THREE.EventDispatcher {
   }
 
   /** Bring a dropped gun back to the holster (thumbstick click, or out of bounds). */
+  /** Put the gun straight into its holster, wherever it is (no animation). */
+  stow() {
+    if (this.hand) this.hand.held = null;
+    this.hand = null;
+    this.cocked = false;
+    if (this.cylinderOpen) this.closeCylinder(false);
+    this.physics.removeBody(this.body);
+    this.tween = null;
+    this.holster.socket.add(this.object);
+    this.object.position.set(0, 0, 0);
+    this.object.quaternion.identity();
+    this.state = RevolverState.HOLSTERED;
+  }
+
+  /** Switch the gun (and its holster) on or off. */
+  setEnabled(on) {
+    this.enabled = on;
+    if (!on) this.stow();
+    this.object.visible = on;
+    this.holster.object.visible = on;
+  }
+
   recall() {
     if (this.state !== RevolverState.DROPPED) return false;
     this.#holster(RECALL_TIME);

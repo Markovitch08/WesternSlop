@@ -49,9 +49,11 @@ export class DuelMode extends THREE.EventDispatcher {
    * @param {import('../fx/ParticleFX.js').ParticleFX} [deps.fx]
    * @param {THREE.Camera} deps.camera
    */
-  constructor({ targets, revolver, sfx, xr, hud, fx = null, camera, modes = { current: null } }) {
+  constructor({ targets, revolver, guns = null, sfx, xr, hud, fx = null, camera, modes = { current: null } }) {
     super();
     Object.assign(this, { targets, revolver, sfx, xr, hud, fx, camera, modes });
+    /** Every revolver the player may carry (the second one only counts while enabled). */
+    this.guns = guns ?? [revolver];
     this.state = DuelState.IDLE;
     this.timer = 0;
     this.round = 0;
@@ -72,7 +74,11 @@ export class DuelMode extends THREE.EventDispatcher {
     // scored 'hit' report (zone, reaction time) for the same bullet.
     targets.addEventListener('duelResolved', ({ duelist, outcome }) => this.#onResolved(duelist, outcome));
     targets.addEventListener('hit', ({ report }) => this.#onHit(report));
-    revolver.addEventListener('grab', () => this.#onGrab());
+    for (const gun of this.guns) gun.addEventListener('grab', () => this.#onGrab());
+  }
+
+  #activeGuns() {
+    return this.guns.filter((g) => g.enabled !== false);
   }
 
   get active() {
@@ -125,7 +131,7 @@ export class DuelMode extends THREE.EventDispatcher {
   }
 
   #promptHolster(n, name) {
-    const loaded = this.revolver.chambers.some((c) => c === 'live');
+    const loaded = this.#activeGuns().some((g) => g.chambers.some((c) => c === 'live'));
     const who = `vs ${name} · draws in ${this.outlawTime.toFixed(2)} s`;
     if (!loaded) this.hud.show('LOAD UP', `Round ${n}: load your gun, then holster it\n${who}`, '#ffd36b');
     else this.hud.show(`ROUND ${n}`, `Holster your gun\n${who}`, '#ffd36b');
@@ -207,12 +213,13 @@ export class DuelMode extends THREE.EventDispatcher {
 
   #step(dt) {
     this.timer += dt;
-    const rev = this.revolver;
-    const holstered = rev.state === RevolverState.HOLSTERED;
+    const guns = this.#activeGuns();
+    const holstered = guns.every((g) => g.state === RevolverState.HOLSTERED);
+    const loaded = guns.some((g) => g.chambers.some((c) => c === 'live'));
 
     switch (this.state) {
       case DuelState.HOLSTER:
-        if (holstered && rev.chambers.some((c) => c === 'live')) this.#enter(DuelState.COUNTDOWN);
+        if (holstered && loaded) this.#enter(DuelState.COUNTDOWN);
         else if (this.timer > 0.5 && !this.hud.text.startsWith('JUMPED')) {
           this.timer = 0;
           this.#promptHolster(this.round + 1, OUTLAW_NAMES[this.round % OUTLAW_NAMES.length]);

@@ -137,7 +137,10 @@ export class AmmoPouch {
     let diff = headYaw - this.bodyYaw;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     this.bodyYaw += diff * Math.min(1, dt * 3);
-    _offset.set(0.17 * this.#sign, 0, -0.02).applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.bodyYaw);
+    // On a hip, or (with a gun on each hip) at the front of the belt.
+    if (this.side === 'front') _offset.set(-0.07, 0, -0.17);
+    else _offset.set(0.17 * this.#sign, 0, -0.02);
+    _offset.applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.bodyYaw);
     this.object.position.set(_head.x + _offset.x, Math.max(0.6, _head.y - 0.62), _head.z + _offset.z);
     this.object.rotation.set(0, this.bodyYaw, 0);
   }

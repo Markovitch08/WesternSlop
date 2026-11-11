@@ -82,34 +82,31 @@ const impacts = new ImpactFX(scene);
 const holster = new Holster(scene, 'right');
 const staticColliders = [...environment.colliders, ...atmosphere.colliders];
 const colliders = [...staticColliders];
-const revolver = new Revolver({
-  xr,
-  holster,
-  sfx,
-  impacts,
-  physics,
-  scene,
-  fx,
-  casings,
-  getColliders: () => {
-    colliders.length = staticColliders.length;
-    colliders.push(...targets.colliders);
-    return colliders;
-  },
-});
+const getColliders = () => {
+  colliders.length = staticColliders.length;
+  colliders.push(...targets.colliders);
+  return colliders;
+};
+const revolver = new Revolver({ xr, holster, sfx, impacts, physics, scene, fx, casings, getColliders });
+// Optional second revolver on the other hip (the "Second gun" setting).
+const holster2 = new Holster(scene, 'left');
+const revolver2 = new Revolver({ xr, holster: holster2, sfx, impacts, physics, scene, fx, casings, getColliders });
+const guns = [revolver, revolver2];
 
-// Free-hand reloading: cartridges come from a pouch on the left hip. Created
-// after the revolver so a squeeze near the gun grabs the gun first.
-const pouch = new AmmoPouch(scene, xr, sfx, () => revolver.roundsWanted, 'left');
-revolver.pouch = pouch;
+// Free-hand reloading: cartridges come from a pouch on the off-hand hip (or the
+// front of the belt with two guns). Created after the revolvers so a squeeze
+// near a gun grabs the gun first. It offers as many rounds as the gun with its
+// cylinder open can take.
+const pouch = new AmmoPouch(scene, xr, sfx, () => (guns.find((g) => g.cylinderOpen) ?? revolver).roundsWanted, 'left');
+for (const g of guns) g.pouch = pouch;
 
 // Game modes, one at a time. Home is static practice (bottles, gongs, plate
 // rack, tumbleweeds). Shoot the black DUEL plate for quick-draw duels, or the
 // orange POP-UP plate for timed pop-up outlaws.
 const modes = { current: null };
 const hud = new DuelHUD(scene, camera);
-const duel = new DuelMode({ targets, revolver, sfx, xr, fx, camera, hud, modes });
-const popups = new PopupMode({ targets, revolver, sfx, hud, modes });
+const duel = new DuelMode({ targets, revolver, guns, sfx, xr, fx, camera, hud, modes });
+const popups = new PopupMode({ targets, revolver, guns, sfx, hud, modes });
 
 // Best results, saved on the device and shown on the scoreboard.
 const records = new Records();
@@ -119,7 +116,7 @@ targets.dirty = true;
 records.addEventListener('record', () => { targets.dirty = true; });
 
 // Every shot is scored (accuracy), and reacts with the target or surface it hit.
-revolver.addEventListener('shot', (shot) => targets.handleShot(shot));
+for (const g of guns) g.addEventListener('shot', (shot) => targets.handleShot(shot));
 
 // Audio may only start after a user gesture: the ENTER VR click counts.
 // Spatial audio: listener on the headset, ambience, terrain echoes. The
@@ -131,17 +128,25 @@ audio.installUnlockHandlers(renderer, xr);
 // Settings: a board beside the bench (point an empty hand + trigger, or click).
 // ---------------------------------------------------------------------------
 const settings = new Settings();
-const settingsBoard = new SettingsBoard(scene, settings, ['handedness', 'turning', 'sfxVolume', 'ambienceVolume', 'quality', 'perfMeter']);
+const settingsBoard = new SettingsBoard(scene, settings, ['handedness', 'secondGun', 'turning', 'sfxVolume', 'ambienceVolume', 'quality', 'perfMeter']);
 // Performance meter: a watch on the off-hand wrist (fps, frame times, draw calls).
 const perf = new PerfMeter(renderer);
 staticColliders.push(...settingsBoard.colliders);
 colliders.length = 0;
 colliders.push(...staticColliders);
+/** Gun hand's hip: holster; other hip: the second gun, or the cartridge pouch. */
+function placeBelt() {
+  const main = settings.get('handedness');
+  const off = main === 'right' ? 'left' : 'right';
+  holster.setSide(main);
+  holster2.setSide(off);
+  pouch.setSide(settings.get('secondGun') ? 'front' : off);
+}
 settings.addEventListener('change', ({ key, value }) => {
-  if (key === 'handedness') {
-    // The gun hand's hip gets the holster; the other hip gets the cartridges.
-    holster.setSide(value);
-    pouch.setSide(value === 'right' ? 'left' : 'right');
+  if (key === 'handedness') placeBelt();
+  else if (key === 'secondGun') {
+    revolver2.setEnabled(value);
+    placeBelt();
   } else if (key === 'sfxVolume') sfx.setVolume(value);
   else if (key === 'ambienceVolume') audio.setAmbience(value);
   else if (key === 'quality') atmosphere.setQuality(value, renderer);
@@ -221,10 +226,12 @@ renderer.setAnimationLoop(() => {
   xr.update(dt);
   updateTurning(dt);
   holster.update(camera, dt);
+  holster2.update(camera, dt);
   pouch.update(camera, dt);
   targets.update(dt);
   physics.step(dt);
   revolver.update(dt);
+  revolver2.update(dt);
   casings.update(dt);
   fx.update(dt);
   popups.update(dt);
@@ -238,4 +245,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf, records };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, revolver2, holster2, guns, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf, records };
