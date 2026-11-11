@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 
 const RESPAWN_DELAY = 2.5; // seconds after the last bottle breaks
-const BOTTLE_COLORS = [0x2e6b3a, 0x6b3a12, 0x9fc7c9];
+export const BOTTLE_COLORS = [0x2e6b3a, 0x6b3a12, 0x9fc7c9];
 
 let bottleGeo = null;
 let colliderGeo = null;
 const materials = new Map();
 
-function bottleGeometry() {
+export function bottleGeometry() {
   if (bottleGeo) return bottleGeo;
   const profile = [
     [0, 0], [0.034, 0], [0.036, 0.01], [0.036, 0.17], [0.03, 0.2], [0.014, 0.235],
@@ -17,7 +17,7 @@ function bottleGeometry() {
   return bottleGeo;
 }
 
-function bottleMaterial(color) {
+export function bottleMaterial(color) {
   if (!materials.has(color)) {
     materials.set(color, new THREE.MeshStandardMaterial({
       color, transparent: true, opacity: 0.82, roughness: 0.08, metalness: 0.1, envMapIntensity: 1.6,

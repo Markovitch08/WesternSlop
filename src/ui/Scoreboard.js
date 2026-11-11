@@ -111,7 +111,7 @@ export class Scoreboard {
     }
     g.fillStyle = 'rgba(239,232,214,0.6)';
     g.font = 'italic 28px Georgia, serif';
-    g.fillText('Plates: red resets · black DUEL · orange POP-UPS', 60, 668);
+    g.fillText('Plates: red resets · black DUEL · orange POP-UPS · yellow TOSS', 60, 668);
 
     this.texture.needsUpdate = true;
     this.redraws++;

@@ -17,7 +17,7 @@ export const UP_WINDOW = 2.6; // seconds the duelist stays up before "too slow"
 let sharedGeometry = null;
 let sharedMaterial = null;
 
-function silhouetteGeometry() {
+export function silhouetteGeometry() {
   if (sharedGeometry) return sharedGeometry;
   const body = new THREE.Shape();
   body.moveTo(-0.24, 0);
@@ -53,7 +53,7 @@ function silhouetteGeometry() {
 }
 
 /** Black-painted outlaw with white scoring rings, mapped to shape coordinates. */
-function silhouetteMaterial() {
+export function silhouetteMaterial() {
   if (sharedMaterial) return sharedMaterial;
   const w = BOUNDS.maxX - BOUNDS.minX;
   const h = BOUNDS.maxY - BOUNDS.minY;
@@ -94,6 +94,22 @@ function silhouetteMaterial() {
   tex.offset.set(-BOUNDS.minX / w, -BOUNDS.minY / h);
   sharedMaterial = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 });
   return sharedMaterial;
+}
+
+/**
+ * Score a hit on the outlaw silhouette from its point in board coordinates:
+ * head / hat / heart ring / chest ring / body, with base points and precision.
+ */
+export function silhouetteZone(p) {
+  const dHead = Math.hypot(p.x - HEAD.x, p.y - HEAD.y);
+  const dHeart = Math.hypot(p.x - HEART.x, p.y - HEART.y);
+  if (dHead <= HEAD.r) return { zone: 'head', label: 'HEADSHOT', base: 100, precision: 1 - 0.3 * (dHead / HEAD.r) };
+  if (p.y >= HAT_Y) return { zone: 'hat', label: 'HAT SHOT', base: 20, precision: 0.3 };
+  if (dHeart <= HEART_R) return { zone: 'heart', label: 'BULLSEYE', base: 100, precision: 1 - 0.2 * (dHeart / HEART_R) };
+  if (dHeart <= CHEST_R) {
+    return { zone: 'chest', label: 'CHEST', base: 70, precision: 0.8 - 0.3 * ((dHeart - HEART_R) / (CHEST_R - HEART_R)) };
+  }
+  return { zone: 'body', label: 'BODY', base: 40, precision: Math.max(0.1, 0.5 - (dHeart - CHEST_R) * 0.6) };
 }
 
 let standMaterial = null;
@@ -310,22 +326,7 @@ export class Duelist {
   /** @returns {object|null} scoring result, or null if not a live target */
   onHit(hit, shot, now) {
     if (!this.isLive) return null;
-    const p = this.board.worldToLocal(hit.point.clone());
-    const dHead = Math.hypot(p.x - HEAD.x, p.y - HEAD.y);
-    const dHeart = Math.hypot(p.x - HEART.x, p.y - HEART.y);
-
-    let zone, label, base, precision;
-    if (dHead <= HEAD.r) {
-      zone = 'head'; label = 'HEADSHOT'; base = 100; precision = 1 - 0.3 * (dHead / HEAD.r);
-    } else if (p.y >= HAT_Y) {
-      zone = 'hat'; label = 'HAT SHOT'; base = 20; precision = 0.3;
-    } else if (dHeart <= HEART_R) {
-      zone = 'heart'; label = 'BULLSEYE'; base = 100; precision = 1 - 0.2 * (dHeart / HEART_R);
-    } else if (dHeart <= CHEST_R) {
-      zone = 'chest'; label = 'CHEST'; base = 70; precision = 0.8 - 0.3 * ((dHeart - HEART_R) / (CHEST_R - HEART_R));
-    } else {
-      zone = 'body'; label = 'BODY'; base = 40; precision = Math.max(0.1, 0.5 - (dHeart - CHEST_R) * 0.6);
-    }
+    const { zone, label, base, precision } = silhouetteZone(this.board.worldToLocal(hit.point.clone()));
 
     // Knocked backwards, harder for a centred hit.
     this.state = 'falling';

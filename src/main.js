@@ -79,6 +79,7 @@ const fx = new ParticleFX(scene);
 fx.wind = atmosphere.wind.vector; // smoke and dust drift on the same wind as everything else
 const casings = new CasingFX(scene, physics, sfx);
 const targets = new TargetManager(scene, { sfx, camera, physics, fx });
+targets.sign.wind = atmosphere.wind.vector; // the WANTED sign sways on the same wind
 const impacts = new ImpactFX(scene);
 const holster = new Holster(scene, 'right');
 const staticColliders = [...environment.colliders, ...atmosphere.colliders];

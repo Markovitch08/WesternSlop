@@ -3,6 +3,7 @@ import { Duelist } from './Duelist.js';
 import { Gong } from './Gong.js';
 import { BottleGroup } from './BottleGroup.js';
 import { PlateRack } from './PlateRack.js';
+import { RunnerTarget, BottleToss, SwingingSign } from './MovingTargets.js';
 import { ShardFX } from '../fx/ShardFX.js';
 import { FloatingText } from '../ui/FloatingText.js';
 import { Scoreboard } from '../ui/Scoreboard.js';
@@ -110,9 +111,23 @@ export class TargetManager extends THREE.EventDispatcher {
     // Orange POP-UP plate: starts the timed pop-up outlaw mode (see PopupMode).
     this.popupPlate = this.#buildPlate(new THREE.Vector3(-0.2, 0, -4.0), { type: 'popupStart', color: 0xd9822b, name: 'popupPlate', label: 'POP-UP' });
 
-    for (const t of [...this.gongs, this.plateRack]) this.staticColliders.push(...t.staticColliders);
+    // --- Moving targets (home practice) ---
+    // A cardboard outlaw running along a rail; a bottle launcher (shoot the
+    // yellow TOSS plate) for air shots; a WANTED sign swinging in the wind.
+    this.runner = new RunnerTarget(new THREE.Vector3(0, 0, -16.5));
+    this.bottleToss = new BottleToss(new THREE.Vector3(3.6, 0, -9.5));
+    this.bottleToss.addTo(scene);
+    this.bottleToss.onShatter = (point, color, scored) => {
+      this.shards.burst(point, color, scored ? 18 : 12, null, { speed: 2.4, size: 1, life: 2.5 });
+      this.sfx.glassShatter(point);
+    };
+    this.sign = new SwingingSign(new THREE.Vector3(-4.2, 0, -14.5), FIRING_LINE);
+    for (const t of [this.runner, this.bottleToss, this.sign]) this.root.add(t.object);
+    this.tossPlate = this.#buildPlate(new THREE.Vector3(0.5, 0, -4.0), { type: 'toss', color: 0xd8b03a, name: 'tossPlate', label: 'TOSS' });
+
+    for (const t of [...this.gongs, this.plateRack, this.runner, this.bottleToss, this.sign]) this.staticColliders.push(...t.staticColliders);
     this.targets = [...this.duelists, ...this.gongs, ...this.bottleGroups, this.plateRack,
-      this.resetPlate, this.duelPlate, this.popupPlate];
+      this.resetPlate, this.duelPlate, this.popupPlate, this.tossPlate, this.runner, this.bottleToss, this.sign];
 
     this.#registerPhysics();
 
@@ -180,6 +195,15 @@ export class TargetManager extends THREE.EventDispatcher {
   }
 
   #score(result, hit, shot, target) {
+    if (result.type === 'toss') {
+      this.sfx.steelPing(hit.point, 0.12);
+      const flung = this.bottleToss.launch();
+      if (flung) this.sfx.clack(this.bottleToss.object.position);
+      this.text.spawn(hit.point, [flung ? 'PULL!' : 'WAIT…'], '#ffd36b');
+      const report = { type: 'toss', launched: flung };
+      this.dispatchEvent({ type: 'hit', report });
+      return report;
+    }
     if (result.type === 'popupStart') {
       this.sfx.steelPing(hit.point, 0.12);
       this.text.spawn(hit.point, ['POP-UPS!'], '#ffb060');
@@ -207,11 +231,12 @@ export class TargetManager extends THREE.EventDispatcher {
 
     const distance = shot.origin.distanceTo(hit.point);
     const distFactor = 1 + distance / 15;
-    const precisionFactor = result.type === 'gong' || result.type === 'plate' ? 0.5 + 0.5 * result.precision : 1;
+    const precisionFactor = ['gong', 'plate', 'sign'].includes(result.type) ? 0.5 + 0.5 * result.precision : 1;
     const reactionBonus = result.reaction != null
       ? Math.round(100 * THREE.MathUtils.clamp(1 - (result.reaction - 0.35) / 1.65, 0, 1))
       : 0;
-    const points = Math.round(result.base * distFactor * precisionFactor) + reactionBonus;
+    // Moving targets carry a bonus multiplier.
+    const points = Math.round(result.base * distFactor * precisionFactor * (result.bonus ?? 1)) + reactionBonus;
 
     const s = this.stats;
     s.points += points;
@@ -250,6 +275,8 @@ export class TargetManager extends THREE.EventDispatcher {
   /** Show or hide the cardboard outlaws (game modes turn them on). */
   setDuelistsActive(active) {
     for (const d of this.duelists) d.setActive(active);
+    // The running outlaw would look like an opponent: he sits out the modes.
+    this.runner?.setVisible(!active);
     if (!active && this.duel) {
       this.duel.phase = 'wait';
       this.duel.active = null;
@@ -334,7 +361,11 @@ export class TargetManager extends THREE.EventDispatcher {
   #registerPhysics() {
     const P = this.physics;
     for (const m of [...this.scoreboard.colliders.slice(0, 2), ...this.propMeshes]) P.addStaticFromMesh(m);
-    for (const pl of [this.resetPlate, this.duelPlate, this.popupPlate]) {
+    P.addStaticFromMesh(this.bottleToss.launcher);
+    this.sign.object.updateWorldMatrix(true, false);
+    const signQ = this.sign.object.getWorldQuaternion(new THREE.Quaternion());
+    for (const [c, h] of this.sign.frameParts) P.addStaticBox(this.sign.object.localToWorld(c.clone()), h, signQ);
+    for (const pl of [this.resetPlate, this.duelPlate, this.popupPlate, this.tossPlate]) {
       P.addStaticFromMesh(pl.post);
       P.addStaticFromMesh(pl.plate, { onGunImpact: (speed, point) => this.sfx.steelPing(point, 0.12) });
     }

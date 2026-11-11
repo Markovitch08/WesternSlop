@@ -86,6 +86,9 @@ The tracks were re-encoded to 128 kbps MP3 and are otherwise unchanged. See `pub
 | Steel gongs | 3 hanging plates at 13, 18 and 24 m (smaller further out). They ring and swing | 50 × precision |
 | Plate rack | 5 knock-down steel plates on a rack at about 11 m, right of the range. They spring back up when all are down | 40 × precision |
 | Tumbleweeds | Rolling across the range on the wind. Shooting one knocks it along | — |
+| Running outlaw | A cardboard outlaw running back and forth on a rail at about 16 m. A hit knocks him flat; he's back up a few seconds later | Pop-up zones × 1.5 moving bonus |
+| Tossed bottles | Shoot the yellow **TOSS** plate and a launcher at about 10 m flings a bottle high into the air. Hit it before it lands | 60 (air shot). A landed bottle smashes for nothing |
+| WANTED sign | Hangs on chains at about 15 m and sways in the wind; hits knock it swinging | 45 × precision × 1.25 moving bonus |
 
 Every score is multiplied by the distance factor 1 + distance / 15. The chalkboard on the left shows score,
 accuracy and draw times, and each hit shows a floating pop-up with points, zone, distance and time.
@@ -98,8 +101,9 @@ it ends:
 | Orange **POP-UP** | 45 seconds of cardboard outlaws springing up at random, after a 3-2-1 countdown. Head and heart rings are worth 100, chest 70, body 40, hat 20, plus up to +100 for a fast hit. The sign shows the clock and your score, then a summary |
 | Black **DUEL** | Quick-draw duels against five outlaws (below) |
 | Red | Resets the scoreboard |
+| Yellow **TOSS** | Flings a bottle into the air from the launcher (home practice) |
 
-The cardboard outlaws only appear while a mode is running.
+The pop-up outlaws only appear while a mode is running, and the running outlaw sits the modes out.
 
 **Records** are saved on the device and shown on the scoreboard: your fastest duel draw, your furthest duel
 ladder run (★ once you've beaten all five), and your best pop-up score. The sign calls out a new record.
@@ -193,6 +197,7 @@ must be disconnected once the sound is over. Run one suite with
 | `src/game/DuelMode.js` | Quick-draw duel mode: round flow, countdown, fouls, outlaw ladder |
 | `src/game/PopupMode.js` | Timed pop-up outlaw mode |
 | `src/targets/PlateRack.js` | Knock-down steel plate rack |
+| `src/targets/MovingTargets.js` | Running outlaw, bottle toss, swinging WANTED sign |
 | `src/game/Settings.js`, `src/ui/SettingsBoard.js` | Saved player settings and the in-world board |
 | `src/ui/PerfMeter.js` | Wrist performance meter |
 | `src/audio/Radio.js`, `public/music/` | The bench radio and its soundtrack |
