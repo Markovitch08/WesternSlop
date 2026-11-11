@@ -12,6 +12,9 @@ import { RevolverState } from '../weapons/Revolver.js';
  *              time. Hit him first to win the round; your time is from the
  *              signal to the hit.
  *   result     a couple of seconds to read the outcome
+ * He fires back: he aims at your head a moment (AIM_LEAD) before each shot,
+ * so moving your head off the line just as he fires makes him miss (a whizz
+ * past your ear); he fires again after REFIRE until one of you hits.
  * Touching the gun before "DRAW!" is a foul: the round restarts.
  * Losing a round ends the run; beating all outlaws wins it. The cardboard
  * outlaws are only shown while a duel (or the pop-up mode) runs.
@@ -34,6 +37,13 @@ const COUNTDOWN_BEAT = 1.0; // s per number
 const RESULT_TIME = 2.6; // s to read a round's outcome
 const SUMMARY_TIME = 4.5; // s to read the final result
 const OUTLAW_STANDS = 0.6; // s the outlaw stays up after firing
+
+// Return fire: the outlaw aims where your head is AIM_LEAD before he shoots, so
+// moving your head off that line at the right moment makes him miss.
+const AIM_LEAD = 0.3; // s
+const AIM_JITTER = 0.03; // m of aiming error
+const HIT_RADIUS = 0.22; // m from the bullet's line to your head that still hits
+const REFIRE = 0.9; // s between his shots after a miss
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -151,6 +161,9 @@ export class DuelMode extends THREE.EventDispatcher {
     this.drawTime = 0;
     this.outlawFired = false;
     this.pendingWin = false;
+    this.nextShotAt = this.outlawTime;
+    this.aimPoint = null;
+    this.dodges = 0;
     this.hud.show('DRAW!', '', '#ff6b4a', true);
     this.sfx.bell(this.opponent.object.position);
     this.dispatchEvent({ type: 'draw', round: this.round, opponent: i });
@@ -179,24 +192,47 @@ export class DuelMode extends THREE.EventDispatcher {
   }
 
   #win(time, label, zone) {
-    this.results.push({ won: true, time, outlawTime: this.outlawTime, zone });
+    this.results.push({ won: true, time, outlawTime: this.outlawTime, zone, dodges: this.dodges });
     this.best = Math.min(this.best ?? Infinity, time);
     const margin = this.outlawTime - time;
-    this.hud.show(`${time.toFixed(2)} s`, `${label} · beat him by ${margin.toFixed(2)} s`, '#9be37a');
+    const detail = this.dodges
+      ? `dodged ${this.dodges} shot${this.dodges > 1 ? 's' : ''}`
+      : `beat him by ${margin.toFixed(2)} s`;
+    this.hud.show(`${time.toFixed(2)} s`, `${label} · ${detail}`, '#9be37a');
     this.opponent = null;
     this.round++;
     this.#enter(DuelState.RESULT);
     this.dispatchEvent({ type: 'roundWon', time, round: this.round });
   }
 
+  /** He fires at the point he aimed at a moment ago: did your head leave that line? */
   #outlawFires() {
-    this.outlawFired = true;
     const d = this.opponent;
-    // His gun hand: right of his chest, firing at the player's head.
-    d.board.localToWorld(_v.set(0.24, 1.05, 0.08));
+    // His gun hand: right of his chest.
+    const gun = d.board.localToWorld(new THREE.Vector3(0.24, 1.05, 0.08));
     const head = this.camera.getWorldPosition(new THREE.Vector3());
-    this.sfx.outlawShot(_v.clone());
-    this.fx?.muzzle(_v.clone(), head.clone().sub(_v).normalize());
+    const aim = this.aimPoint ?? head.clone();
+    this.aimPoint = null;
+    const dir = aim.clone().sub(gun).normalize();
+    this.sfx.outlawShot(gun.clone());
+    this.fx?.muzzle(gun.clone(), dir);
+
+    // Closest approach of the bullet's line to your head.
+    const along = head.clone().sub(gun).dot(dir);
+    const closest = gun.clone().addScaledVector(dir, Math.max(0, along));
+    const miss = closest.distanceTo(head);
+    this.lastMissDistance = miss;
+    if (miss > HIT_RADIUS) {
+      this.dodges++;
+      this.sfx.bulletWhizz(closest);
+      for (const h of this.xr.hands) if (h.connected) this.xr.pulse(h, 0.25, 40);
+      this.hud.show('MISSED!', 'He missed you · shoot him!', '#ffb060', true);
+      this.nextShotAt = this.drawTime + REFIRE;
+      this.dispatchEvent({ type: 'dodge', miss, round: this.round });
+      return;
+    }
+
+    this.outlawFired = true;
     this.hud.hurt();
     for (const h of this.xr.hands) if (h.connected) this.xr.pulse(h, 1.0, 220);
     this.results.push({ won: false, time: null, outlawTime: this.outlawTime, zone: null });
@@ -242,7 +278,12 @@ export class DuelMode extends THREE.EventDispatcher {
 
       case DuelState.DRAW:
         this.drawTime += dt;
-        if (this.drawTime >= this.outlawTime && this.opponent?.isLive) this.#outlawFires();
+        if (!this.aimPoint && this.drawTime >= this.nextShotAt - AIM_LEAD) {
+          // He takes aim at where your head is now (with a little error).
+          this.aimPoint = this.camera.getWorldPosition(new THREE.Vector3())
+            .add(new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0).multiplyScalar(AIM_JITTER));
+        }
+        if (this.drawTime >= this.nextShotAt && this.opponent?.isLive) this.#outlawFires();
         break;
 
       case DuelState.RESULT: {

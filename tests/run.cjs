@@ -24,6 +24,7 @@ const SUITES = {
   records: require('./suites/records.cjs'),
   dual: require('./suites/dual.cjs'),
   twirl: require('./suites/twirl.cjs'),
+  dodge: require('./suites/dodge.cjs'),
 };
 
 (async () => {

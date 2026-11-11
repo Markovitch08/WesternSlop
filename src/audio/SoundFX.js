@@ -460,4 +460,13 @@ export class SoundFX {
     const t = this.ctx.currentTime;
     this.#noiseBurst(t, 0.14, 'bandpass', 700, 1600, 0.18);
   }
+
+  /** A bullet passing close by: a short tearing hiss that drops in pitch. */
+  bulletWhizz(position) {
+    this.#count('whizz');
+    if (!this.ctx) return;
+    const { dest, t } = this.#spatial(position, 1.2, { ref: 1, rolloff: 1 });
+    this.#noiseBurst(t, 0.22, 'bandpass', 4200, 900, 0.8, dest);
+    this.#tone(t, 0.18, 'sine', 1900, 700, 0.12, dest);
+  }
 }

@@ -117,6 +117,10 @@ Shoot the black **DUEL** plate to take on five outlaws in a row, each faster on 
 4. **Win or die.** Win and the sign shows your draw time and margin. Too slow and he fires back: his shot comes
    from downrange, with muzzle smoke, a red flash and a hard rumble in both hands.
 
+**He shoots back.** Each outlaw aims at your head a moment (0.3 s) before he fires. Step or lean off that line
+as he shoots and he misses: the bullet whizzes past your ear, the sign says MISSED!, and he fires again 0.9 s later.
+Leaning early doesn't help, because he aims at where you are.
+
 Touching your gun before "DRAW!" is **JUMPED THE GUN**: holster again to restart the round. Losing a round ends
 the run with a summary of outlaws beaten and your best draw; beat all five to be the **FASTEST GUN** in the West.
 The outlaws pack away when the duel ends.
