@@ -97,6 +97,60 @@ function silhouetteMaterial() {
 }
 
 let standMaterial = null;
+let armGeometry = null;
+let glintTexture = null;
+const armMaterial = new THREE.MeshStandardMaterial({ color: 0x26211d, roughness: 0.8 });
+
+// Gun arm: hinged at the right shoulder; hangs at his side, swings up and
+// toward the player to shoot (duel mode only).
+const SHOULDER = new THREE.Vector3(0.22, 1.33, 0.03);
+const ARM_REST = { z: -1.35, y: 0 };
+const ARM_AIM = { z: 0.12, y: -0.75 };
+const ARM_SPEED = 3.2; // aim level per second (~0.3 s to raise)
+const MUZZLE = new THREE.Vector3(0.47, 0.035, 0.012);
+
+/** A cardboard sleeve with a revolver at the end, along +X from the shoulder. */
+function gunArmGeometry() {
+  if (armGeometry) return armGeometry;
+  const s = new THREE.Shape();
+  s.moveTo(0, -0.04);
+  s.lineTo(0.3, -0.035); // sleeve
+  s.lineTo(0.31, -0.06); // grip
+  s.lineTo(0.35, -0.06);
+  s.lineTo(0.345, 0.0);
+  s.lineTo(0.47, 0.012); // barrel
+  s.lineTo(0.47, 0.045);
+  s.lineTo(0.33, 0.045); // hammer
+  s.lineTo(0.32, 0.06);
+  s.lineTo(0.3, 0.035);
+  s.lineTo(0, 0.04);
+  s.closePath();
+  armGeometry = new THREE.ExtrudeGeometry(s, { depth: 0.02, bevelEnabled: false });
+  return armGeometry;
+}
+
+/** A four-pointed sun glint, for the flash on his gun as he takes aim. */
+function glintSprite() {
+  glintTexture ??= (() => {
+    const [c, g] = makeCanvas(128, 128);
+    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.25, 'rgba(255,240,200,0.8)');
+    grad.addColorStop(1, 'rgba(255,220,150,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    g.beginPath(); g.moveTo(64, 0); g.lineTo(70, 64); g.lineTo(64, 128); g.lineTo(58, 64); g.fill();
+    g.beginPath(); g.moveTo(0, 64); g.lineTo(64, 58); g.lineTo(128, 64); g.lineTo(64, 70); g.fill();
+    return canvasToTexture(c, { repeat: false });
+  })();
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glintTexture, color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  }));
+  sprite.visible = false;
+  sprite.raycast = () => {};
+  return sprite;
+}
 
 /**
  * Spring-loaded pop-up outlaw for quick-draw duels. Rises on a hinge, scores by
@@ -133,6 +187,25 @@ export class Duelist {
     this.board.userData.target = this;
     this.board.name = 'duelistBoard';
     this.hinge.add(this.board);
+
+    this.shoulder = new THREE.Group();
+    this.shoulder.position.copy(SHOULDER);
+    this.board.add(this.shoulder);
+    this.arm = new THREE.Mesh(gunArmGeometry(), armMaterial);
+    this.arm.castShadow = true;
+    this.arm.raycast = () => {}; // the arm is decoration; the body is the target
+    this.shoulder.add(this.arm);
+    this.muzzle = new THREE.Object3D();
+    this.muzzle.position.copy(MUZZLE);
+    this.shoulder.add(this.muzzle);
+    this.glint = glintSprite();
+    this.muzzle.add(this.glint);
+    /** 0 = arm hanging at his side, 1 = aimed at the player. */
+    this.aimLevel = 0;
+    this.aimTarget = 0;
+    this.glintTime = 0;
+    this.flashTime = 0;
+    this.#poseArm();
 
     this.stand = stand;
     this.staticColliders = [];
@@ -199,6 +272,33 @@ export class Duelist {
   }
 
   /** Drop back down without a result (the duel mode's outlaw after he fires). */
+  /** Raise (1) or lower (0) the gun arm; it moves there at ARM_SPEED. */
+  aim(target) {
+    this.aimTarget = target;
+  }
+
+  /** The glint on his gun as he takes aim (the dodge cue). */
+  glintNow() {
+    this.glintTime = 0.3;
+  }
+
+  /** Muzzle flash on the cardboard gun, and the arm kicks up with the recoil. */
+  fireFlash() {
+    this.flashTime = 0.1;
+    this.aimLevel = Math.max(0, this.aimLevel - 0.35);
+  }
+
+  /** World position of the gun's muzzle. */
+  muzzleWorld(target = new THREE.Vector3()) {
+    this.muzzle.updateWorldMatrix(true, false);
+    return target.setFromMatrixPosition(this.muzzle.matrixWorld);
+  }
+
+  #poseArm() {
+    const k = THREE.MathUtils.smoothstep(this.aimLevel, 0, 1);
+    this.shoulder.rotation.set(0, ARM_REST.y + (ARM_AIM.y - ARM_REST.y) * k, ARM_REST.z + (ARM_AIM.z - ARM_REST.z) * k, 'YZX');
+  }
+
   retire() {
     if (!this.isLive) return false;
     this.state = 'falling';
@@ -268,5 +368,26 @@ export class Duelist {
       }
     }
     this.hinge.rotation.x = this.angle;
+
+    // Gun arm and its flashes.
+    if (this.state === 'down' || this.state === 'falling') this.aimTarget = 0;
+    const step = ARM_SPEED * dt;
+    this.aimLevel += THREE.MathUtils.clamp(this.aimTarget - this.aimLevel, -step, step);
+    this.#poseArm();
+    this.glintTime = Math.max(0, this.glintTime - dt);
+    this.flashTime = Math.max(0, this.flashTime - dt);
+    const g = this.glint;
+    if (this.flashTime > 0) {
+      g.visible = true;
+      g.material.color.setHex(0xffa040);
+      g.scale.setScalar(0.9);
+    } else if (this.glintTime > 0) {
+      g.visible = true;
+      g.material.color.setHex(0xffffff);
+      // Big enough to catch the eye at 15 m: the dodge cue.
+      g.scale.setScalar(0.4 + 0.3 * Math.sin((0.3 - this.glintTime) * 40) ** 2);
+    } else {
+      g.visible = false;
+    }
   }
 }

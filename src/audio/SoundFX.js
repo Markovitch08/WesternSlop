@@ -469,4 +469,14 @@ export class SoundFX {
     this.#noiseBurst(t, 0.22, 'bandpass', 4200, 900, 0.8, dest);
     this.#tone(t, 0.18, 'sine', 1900, 700, 0.12, dest);
   }
+
+  /** The outlaw cocking his hammer as he takes aim: a sharp click from downrange. */
+  outlawCock(position) {
+    this.#count('outlawCock');
+    if (!this.ctx) return;
+    const { dest, t } = this.#spatial(position, 1.6, { ref: 2, rolloff: 0.5 });
+    this.#noiseBurst(t, 0.025, 'highpass', 3600, 2600, 0.7, dest);
+    this.#tone(t, 0.03, 'triangle', 2400, 1700, 0.35, dest);
+    this.#noiseBurst(t + 0.05, 0.02, 'highpass', 4200, 3000, 0.5, dest);
+  }
 }

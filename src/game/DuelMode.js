@@ -44,6 +44,8 @@ const AIM_LEAD = 0.3; // s
 const AIM_JITTER = 0.03; // m of aiming error
 const HIT_RADIUS = 0.22; // m from the bullet's line to your head that still hits
 const REFIRE = 0.9; // s between his shots after a miss
+const RAISE_TIME = 0.35; // s his gun arm takes to come up before he aims
+const TRACER_TIME = 0.18; // s the bullet streak stays visible
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -152,6 +154,25 @@ export class DuelMode extends THREE.EventDispatcher {
     this.sfx.countdownTick(number === 1);
   }
 
+  /** A bright streak along the outlaw's bullet path (out to 40 m). */
+  #showTracer(from, dir, length = 40) {
+    if (!this.tracer) {
+      const geo = new THREE.CylinderGeometry(0.004, 0.004, 1, 6, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.5);
+      this.tracer = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: 0xffe2a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+      }));
+      this.tracer.name = 'outlawTracer';
+      this.tracer.raycast = () => {};
+      this.tracer.frustumCulled = false;
+      this.targets.scene.add(this.tracer);
+    }
+    this.tracer.position.copy(from);
+    this.tracer.lookAt(from.clone().add(dir));
+    this.tracer.scale.set(1, 1, length);
+    this.tracerTime = TRACER_TIME;
+    this.tracer.visible = true;
+  }
+
   #signalDraw() {
     const free = this.targets.duelists.filter((d) => d.state === 'down');
     const pool = free.length ? free : this.targets.duelists;
@@ -209,25 +230,29 @@ export class DuelMode extends THREE.EventDispatcher {
   #outlawFires() {
     const d = this.opponent;
     // His gun hand: right of his chest.
-    const gun = d.board.localToWorld(new THREE.Vector3(0.24, 1.05, 0.08));
+    const gun = d.muzzleWorld();
     const head = this.camera.getWorldPosition(new THREE.Vector3());
     const aim = this.aimPoint ?? head.clone();
     this.aimPoint = null;
     const dir = aim.clone().sub(gun).normalize();
     this.sfx.outlawShot(gun.clone());
     this.fx?.muzzle(gun.clone(), dir);
+    d.fireFlash();
 
     // Closest approach of the bullet's line to your head.
     const along = head.clone().sub(gun).dot(dir);
     const closest = gun.clone().addScaledVector(dir, Math.max(0, along));
     const miss = closest.distanceTo(head);
     this.lastMissDistance = miss;
+    // The streak runs on past you on a miss; on a hit it stops short of your eyes.
+    this.#showTracer(gun, dir, miss > HIT_RADIUS ? 40 : Math.max(0.5, along - 0.6));
     if (miss > HIT_RADIUS) {
       this.dodges++;
       this.sfx.bulletWhizz(closest);
       for (const h of this.xr.hands) if (h.connected) this.xr.pulse(h, 0.25, 40);
       this.hud.show('MISSED!', 'He missed you · shoot him!', '#ffb060', true);
       this.nextShotAt = this.drawTime + REFIRE;
+      d.aim(0.6); // recoil and lower a little; he raises it again to re-aim
       this.dispatchEvent({ type: 'dodge', miss, round: this.round });
       return;
     }
@@ -243,6 +268,11 @@ export class DuelMode extends THREE.EventDispatcher {
 
   update(dt) {
     if (this.active) this.#step(dt);
+    if (this.tracer?.visible) {
+      this.tracerTime -= dt;
+      this.tracer.material.opacity = Math.max(0, this.tracerTime / TRACER_TIME) * 0.9;
+      if (this.tracerTime <= 0) this.tracer.visible = false;
+    }
     // After the state machine, so a flash or pop starts on the frame it happens.
     this.hud.update(dt);
   }
@@ -278,7 +308,13 @@ export class DuelMode extends THREE.EventDispatcher {
 
       case DuelState.DRAW:
         this.drawTime += dt;
-        if (!this.aimPoint && this.drawTime >= this.nextShotAt - AIM_LEAD) {
+        // Tell: his gun arm comes up, then a glint and a hammer click as he
+        // takes aim. Move off the line after the glint to make him miss.
+        if (this.opponent?.isLive && this.drawTime >= this.nextShotAt - AIM_LEAD - RAISE_TIME) this.opponent.aim(1);
+        if (!this.aimPoint && this.drawTime >= this.nextShotAt - AIM_LEAD && this.opponent?.isLive) {
+          this.opponent.glintNow();
+          this.sfx.outlawCock(this.opponent.muzzleWorld());
+          this.dispatchEvent({ type: 'aim' });
           // He takes aim at where your head is now (with a little error).
           this.aimPoint = this.camera.getWorldPosition(new THREE.Vector3())
             .add(new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0).multiplyScalar(AIM_JITTER));

@@ -59,9 +59,29 @@ module.exports = async function dodgeSuite() {
   };
   const untilDrawTime = (t) => until(() => duel.state !== 'draw' || duel.drawTime >= t, 400);
 
-  // --- Standing still: he hits ---------------------------------------------------------
+  // --- The tell: arm up, then glint + click as he aims; flash + tracer as he fires ---
+  let atAim = null;
+  duel.addEventListener('aim', () => {
+    const o = duel.opponent;
+    atAim = { arm: o.aimLevel, glint: o.glint.visible || o.glintTime > 0 };
+  });
+  const cocks = played('outlawCock');
   check('duel at the draw', await startRound());
-  await until(() => duel.state !== 'draw', 400);
+  const opp0 = duel.opponent;
+  check('his gun arm hangs at his side at first', opp0.aimLevel < 0.2, opp0.aimLevel.toFixed(2));
+  await until(() => atAim !== null, 400);
+  check('his arm is up by the time he aims', atAim?.arm > 0.9, atAim?.arm?.toFixed(2));
+  check('a glint on his gun as he takes aim', atAim?.glint === true);
+  check('and his hammer clicks', played('outlawCock') === cocks + 1);
+  let tracerSeen = null;
+  for (let i = 0; i < 400 && duel.state === 'draw'; i++) {
+    if (duel.tracer?.visible && !tracerSeen) tracerSeen = { len: duel.tracer.scale.z, flash: opp0.flashTime > 0 };
+    await frames(1);
+  }
+  tracerSeen ??= duel.tracer?.visible ? { len: duel.tracer.scale.z, flash: opp0.flashTime > 0 } : null;
+  check('a muzzle flash and a tracer streak when he fires', tracerSeen !== null && tracerSeen.flash, JSON.stringify(tracerSeen));
+  const headDist = cam.getWorldPosition(V(0, 0, 0)).distanceTo(opp0.muzzleWorld());
+  check('on a hit the tracer stops short of your eyes', tracerSeen && tracerSeen.len < headDist, `${tracerSeen?.len.toFixed(2)} < ${headDist.toFixed(2)}`);
   check('standing still: he hits you', duel.results.at(-1)?.won === false && duel.hud.text === "YOU'RE DEAD" && duel.lastMissDistance <= 0.22,
     `${duel.hud.text} miss=${duel.lastMissDistance?.toFixed(3)}`);
   duel.stop();
@@ -88,6 +108,7 @@ module.exports = async function dodgeSuite() {
   check('dodging off the line: he misses', duel.state === 'draw' && duel.dodges === 1 && duel.lastMissDistance > 0.22,
     `state=${duel.state} dodges=${duel.dodges} miss=${duel.lastMissDistance?.toFixed(3)}`);
   check('a whizz past your ear', played('whizz') === whizz + 1);
+  check('on a miss the tracer runs on past you', duel.tracer.scale.z >= 40);
   check('the sign says he missed', duel.hud.text === 'MISSED!', duel.hud.text);
   check('he will fire again', duel.nextShotAt > outlawTime, duel.nextShotAt.toFixed(2));
 
@@ -109,5 +130,7 @@ module.exports = async function dodgeSuite() {
   check('the sign credits the dodge', duel.hud.sub.includes('dodged 1 shot'), duel.hud.sub);
   duel.stop();
   cam.position.copy(home);
+  await frames(30);
+  check('arm back down once it is over', g.targets.duelists.every((d) => d.aimLevel < 0.05));
   return out;
 };
