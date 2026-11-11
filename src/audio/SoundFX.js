@@ -479,4 +479,15 @@ export class SoundFX {
     this.#tone(t, 0.03, 'triangle', 2400, 1700, 0.35, dest);
     this.#noiseBurst(t + 0.05, 0.02, 'highpass', 4200, 3000, 0.5, dest);
   }
+
+  /** Lever-action stroke: a clack down and a clack home. */
+  leverAction() {
+    this.#count('lever');
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.#noiseBurst(t, 0.04, 'bandpass', 2200, 1500, 0.5);
+    this.#tone(t, 0.04, 'triangle', 600, 420, 0.25);
+    this.#noiseBurst(t + 0.17, 0.05, 'bandpass', 2600, 1800, 0.6);
+    this.#tone(t + 0.17, 0.05, 'triangle', 700, 480, 0.3);
+  }
 }

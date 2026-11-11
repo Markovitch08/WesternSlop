@@ -41,6 +41,20 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | Fire (double action) | Full, heavy trigger pull: the hammer rises with the trigger and drops at the break |
 | Aim | Line the brass bead on the front blade up in the rear notch. Bullets fly at 260 m/s and drop under gravity; the sights are zeroed at 15 m (about 2 cm low up close, about 1.5 cm low at 25 m) |
 
+## Lever-action rifle
+
+It lies on a waist-high rack just right of the bench.
+
+| Action | Input |
+| --- | --- |
+| Take it | Grip button with either hand at the rack |
+| Steady it | Squeeze your other hand's grip on the wooden fore-end: it points along the line from your back hand to your front hand. Let go with the front hand to go one-handed |
+| Fire | Trigger. Then work the lever (**A** / **X**) to throw out the case and chamber the next round. Without the lever there's only a dry click |
+| Reload | Let go: it returns to the rack, which reloads it (10 in the magazine plus 1 in the chamber) |
+
+It shoots flatter than the revolver (400 m/s), and its buckhorn sights are zeroed at 25 m. Duels treat it as a gun:
+it has to be on the rack before the countdown, and grabbing it early is a foul.
+
 ## Settings
 
 A board to the right of the bench. Point an empty hand at a ◀ or ▶ and pull the trigger (or click it on
@@ -197,6 +211,7 @@ must be disconnected once the sound is over. Run one suite with
 | `src/game/DuelMode.js` | Quick-draw duel mode: round flow, countdown, fouls, outlaw ladder |
 | `src/game/PopupMode.js` | Timed pop-up outlaw mode |
 | `src/targets/PlateRack.js` | Knock-down steel plate rack |
+| `src/weapons/Rifle.js`, `ballistics.js` | Lever-action rifle and its rack; shared bullet tracing |
 | `src/targets/MovingTargets.js` | Running outlaw, bottle toss, swinging WANTED sign |
 | `src/game/Settings.js`, `src/ui/SettingsBoard.js` | Saved player settings and the in-world board |
 | `src/ui/PerfMeter.js` | Wrist performance meter |

@@ -9,6 +9,7 @@ import { FloatingText } from '../ui/FloatingText.js';
 import { Scoreboard } from '../ui/Scoreboard.js';
 import { plankTexture, signTexture } from '../util/canvasTextures.js';
 import { worldBox, barrelGeometry } from '../util/geometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /** Where the player stands; targets turn to face this point. */
 const FIRING_LINE = new THREE.Vector3(0, 1.5, 0);
@@ -129,6 +130,7 @@ export class TargetManager extends THREE.EventDispatcher {
     this.targets = [...this.duelists, ...this.gongs, ...this.bottleGroups, this.plateRack,
       this.resetPlate, this.duelPlate, this.popupPlate, this.tossPlate, this.runner, this.bottleToss, this.sign];
 
+    this.#mergePlatePosts();
     this.#registerPhysics();
 
     this.time = 0;
@@ -422,6 +424,19 @@ export class TargetManager extends THREE.EventDispatcher {
     }
   }
 
+  /** Draw every action plate's post as one mesh (4 posts: 1 draw call, 1 shadow). */
+  #mergePlatePosts() {
+    const geos = [this.resetPlate, this.duelPlate, this.popupPlate, this.tossPlate].map((pl) => {
+      pl.post.updateWorldMatrix(true, false);
+      return worldBox(0.06, 0.9, 0.06).applyMatrix4(pl.post.matrixWorld);
+    });
+    const posts = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshStandardMaterial({ color: 0x4a3322, roughness: 0.9 }));
+    posts.castShadow = true;
+    posts.raycast = () => {};
+    posts.name = 'platePosts';
+    this.scene.add(posts);
+  }
+
   /**
    * A small steel plate on a post that triggers an action when shot.
    * @param {THREE.Vector3} position
@@ -431,9 +446,10 @@ export class TargetManager extends THREE.EventDispatcher {
     const group = new THREE.Group();
     group.position.copy(position);
     group.rotation.y = Math.atan2(FIRING_LINE.x - position.x, FIRING_LINE.z - position.z);
-    const post = new THREE.Mesh(worldBox(0.06, 0.9, 0.06), new THREE.MeshStandardMaterial({ color: 0x4a3322, roughness: 0.9 }));
+    // The post is drawn by one merged mesh for all plates (#mergePlatePosts);
+    // this one stays invisible, for bullets and physics.
+    const post = new THREE.Mesh(worldBox(0.06, 0.9, 0.06), new THREE.MeshBasicMaterial({ visible: false }));
     post.position.y = 0.45;
-    post.castShadow = true;
     post.userData.surface = 'wood';
     const plateGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.012, 24);
     plateGeo.rotateX(Math.PI / 2);

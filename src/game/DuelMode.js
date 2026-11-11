@@ -143,7 +143,7 @@ export class DuelMode extends THREE.EventDispatcher {
   }
 
   #promptHolster(n, name) {
-    const loaded = this.#activeGuns().some((g) => g.chambers.some((c) => c === 'live'));
+    const loaded = this.#activeGuns().some((g) => g.chambers?.some((c) => c === 'live'));
     const who = `vs ${name} · draws in ${this.outlawTime.toFixed(2)} s`;
     if (!loaded) this.hud.show('LOAD UP', `Round ${n}: load your gun, then holster it\n${who}`, '#ffd36b');
     else this.hud.show(`ROUND ${n}`, `Holster your gun\n${who}`, '#ffd36b');
@@ -280,8 +280,8 @@ export class DuelMode extends THREE.EventDispatcher {
   #step(dt) {
     this.timer += dt;
     const guns = this.#activeGuns();
-    const holstered = guns.every((g) => g.state === RevolverState.HOLSTERED);
-    const loaded = guns.some((g) => g.chambers.some((c) => c === 'live'));
+    const holstered = guns.every((g) => g.state === RevolverState.HOLSTERED || g.state === 'racked');
+    const loaded = guns.some((g) => g.chambers?.some((c) => c === 'live'));
 
     switch (this.state) {
       case DuelState.HOLSTER:

@@ -8,6 +8,7 @@ import { AudioEnvironment } from './audio/AudioEnvironment.js';
 import { XRManager } from './xr/XRManager.js';
 import { Revolver } from './weapons/Revolver.js';
 import { Holster } from './weapons/Holster.js';
+import { Rifle } from './weapons/Rifle.js';
 import { SoundFX } from './audio/SoundFX.js';
 import { ImpactFX } from './fx/ImpactFX.js';
 import { PhysicsWorld } from './physics/PhysicsWorld.js';
@@ -93,6 +94,8 @@ const revolver = new Revolver({ xr, holster, sfx, impacts, physics, scene, fx, c
 // Optional second revolver on the other hip (the "Second gun" setting).
 const holster2 = new Holster(scene, 'left');
 const revolver2 = new Revolver({ xr, holster: holster2, sfx, impacts, physics, scene, fx, casings, getColliders });
+// Lever-action rifle on a rack beside the bench.
+const rifle = new Rifle({ scene, xr, sfx, impacts, fx, casings, getColliders });
 const guns = [revolver, revolver2];
 
 // Free-hand reloading: cartridges come from a pouch on the off-hand hip (or the
@@ -107,8 +110,8 @@ for (const g of guns) g.pouch = pouch;
 // orange POP-UP plate for timed pop-up outlaws.
 const modes = { current: null };
 const hud = new DuelHUD(scene, camera);
-const duel = new DuelMode({ targets, revolver, guns, sfx, xr, fx, camera, hud, modes });
-const popups = new PopupMode({ targets, revolver, guns, sfx, hud, modes });
+const duel = new DuelMode({ targets, revolver, guns: [...guns, rifle], sfx, xr, fx, camera, hud, modes });
+const popups = new PopupMode({ targets, revolver, guns: [...guns, rifle], sfx, hud, modes });
 
 // Best results, saved on the device and shown on the scoreboard.
 const records = new Records();
@@ -118,7 +121,11 @@ targets.dirty = true;
 records.addEventListener('record', () => { targets.dirty = true; });
 
 // Every shot is scored (accuracy), and reacts with the target or surface it hit.
-for (const g of guns) g.addEventListener('shot', (shot) => targets.handleShot(shot));
+for (const g of [...guns, rifle]) g.addEventListener('shot', (shot) => targets.handleShot(shot));
+staticColliders.push(...rifle.colliders);
+colliders.length = 0;
+colliders.push(...staticColliders);
+physics.addStaticFromMesh(rifle.rack);
 // Spinning a gun into its holster earns a little flourish.
 for (const g of guns) {
   g.addEventListener('twirlHolster', () => targets.text.spawn(g.holster.object.getWorldPosition(new THREE.Vector3()), ['SMOOTH!'], '#ffd36b'));
@@ -245,6 +252,7 @@ renderer.setAnimationLoop(() => {
   physics.step(dt);
   revolver.update(dt);
   revolver2.update(dt);
+  rifle.update(dt);
   casings.update(dt);
   fx.update(dt);
   popups.update(dt);
@@ -259,4 +267,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, revolver2, holster2, guns, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf, records, radio };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, revolver2, holster2, guns, rifle, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf, records, radio };

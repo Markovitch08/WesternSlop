@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeCanvas, canvasToTexture } from '../util/canvasTextures.js';
 
 /** The radio's playlist (files in public/music; see public/music/CREDITS.md). */
@@ -105,11 +106,9 @@ export class Radio extends THREE.EventDispatcher {
     clothMesh.position.z = D / 2 + 0.009;
     this.object.add(clothMesh);
     const barMat = new THREE.MeshStandardMaterial({ color: 0x3a2210, roughness: 0.6 });
-    for (const x of [-0.045, 0, 0.045]) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.16, 0.006), barMat);
-      bar.position.set(x, 0.2, D / 2 + 0.012);
-      this.object.add(bar);
-    }
+    const bars = new THREE.Mesh(mergeGeometries([-0.045, 0, 0.045].map((x) =>
+      new THREE.BoxGeometry(0.008, 0.16, 0.006).translate(x, 0.2, D / 2 + 0.012))), barMat);
+    this.object.add(bars);
 
     // Dial window showing the station (track) name.
     [this.canvas, this.ctx] = makeCanvas(512, 128);
@@ -121,8 +120,11 @@ export class Radio extends THREE.EventDispatcher {
 
     // Brass button strip along the bottom.
     const brass = new THREE.MeshStandardMaterial({ color: 0xc9a14a, metalness: 0.85, roughness: 0.3 });
+    // All four knobs draw as one mesh; each has an invisible hit disc for pointing.
+    const knobGeo = () => new THREE.CylinderGeometry(0.014, 0.014, 0.012, 16).rotateX(Math.PI / 2);
+    this.object.add(new THREE.Mesh(mergeGeometries(BUTTONS.map((b) => knobGeo().translate(b.x, 0.046, D / 2 + 0.014))), brass));
     this.buttons = BUTTONS.map((b) => {
-      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 16).rotateX(Math.PI / 2), brass);
+      const knob = new THREE.Mesh(knobGeo(), new THREE.MeshBasicMaterial({ visible: false }));
       knob.position.set(b.x, 0.046, D / 2 + 0.014);
       knob.userData = { radioAction: b.action };
       knob.name = `radio:${b.action}`;

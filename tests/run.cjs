@@ -27,6 +27,7 @@ const SUITES = {
   dodge: require('./suites/dodge.cjs'),
   radio: require('./suites/radio.cjs'),
   moving: require('./suites/moving.cjs'),
+  rifle: require('./suites/rifle.cjs'),
 };
 
 (async () => {

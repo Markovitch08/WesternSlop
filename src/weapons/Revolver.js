@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BUTTON } from '../xr/XRManager.js';
 import { CANNON } from '../physics/PhysicsWorld.js';
+import { traceBullet } from './ballistics.js';
 
 /**
  * Single-action-army-style six-shooter.
@@ -69,7 +70,6 @@ const CLATTER_COOLDOWN = 0.08; // s
 export const MUZZLE_VELOCITY = 260; // m/s
 const GRAVITY = 9.81;
 const MAX_RANGE = 150; // metres traced
-const SEGMENT_TIME = 1 / 120; // s per traced segment (~2.2 m)
 
 // Sights (gun-local metres). See the class comment.
 const BORE_Y = 0.06;
@@ -579,36 +579,14 @@ export class Revolver extends THREE.EventDispatcher {
   }
 
   /**
-   * Trace the bullet: constant-gravity flight in SEGMENT_TIME steps, each
+   * Trace the bullet (see ballistics.js): constant-gravity flight in short steps, each
    * segment raycast against the colliders. Returns the first hit (with
    * `distance` measured along the path) or null.
    */
   traceBullet(origin, direction) {
-    const colliders = this.getColliders();
-    const pos = origin.clone();
-    const vel = direction.clone().multiplyScalar(MUZZLE_VELOCITY);
-    const next = new THREE.Vector3();
-    const seg = new THREE.Vector3();
-    const t = SEGMENT_TIME;
-    let travelled = 0;
-    while (travelled < MAX_RANGE) {
-      next.copy(pos).addScaledVector(vel, t);
-      next.y -= 0.5 * GRAVITY * t * t;
-      vel.y -= GRAVITY * t;
-      seg.subVectors(next, pos);
-      const len = seg.length();
-      this.raycaster.set(pos, seg.divideScalar(len));
-      this.raycaster.far = len;
-      const hit = this.raycaster.intersectObjects(colliders, true)[0];
-      if (hit) {
-        hit.distance += travelled;
-        return hit;
-      }
-      travelled += len;
-      pos.copy(next);
-    }
-    return null;
+    return traceBullet(this.raycaster, this.getColliders(), origin, direction, MUZZLE_VELOCITY, MAX_RANGE);
   }
+
 
   #shoot() {
     this.muzzle.updateWorldMatrix(true, false);

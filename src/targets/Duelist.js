@@ -207,8 +207,7 @@ export class Duelist {
     this.shoulder = new THREE.Group();
     this.shoulder.position.copy(SHOULDER);
     this.board.add(this.shoulder);
-    this.arm = new THREE.Mesh(gunArmGeometry(), armMaterial);
-    this.arm.castShadow = true;
+    this.arm = new THREE.Mesh(gunArmGeometry(), armMaterial); // too thin to need a shadow
     this.arm.raycast = () => {}; // the arm is decoration; the body is the target
     this.shoulder.add(this.arm);
     this.muzzle = new THREE.Object3D();
