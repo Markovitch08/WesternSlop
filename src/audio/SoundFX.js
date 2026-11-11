@@ -452,4 +452,12 @@ export class SoundFX {
       this.#disposeLater([send], t);
     }
   }
+
+  /** A revolver whirling round the trigger finger: a soft whoosh. */
+  twirl() {
+    this.#count('twirl');
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.#noiseBurst(t, 0.14, 'bandpass', 700, 1600, 0.18);
+  }
 }

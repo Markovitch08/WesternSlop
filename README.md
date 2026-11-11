@@ -25,6 +25,7 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | --- | --- |
 | Draw / hold the revolver | Hold the **grip** button with your hand at your right hip, where the holster is. The gun only stays in your hand while you keep holding grip |
 | Swap hands | Squeeze the other hand's grip near the gun |
+| Twirl | With your trigger finger off and the hammer down, flick your wrist sharply up or down: the gun spins round the trigger guard and you catch it after a turn or two. It can't fire mid-spin. Let go at the hip mid-spin to spin it into the holster |
 | Dual wield | Turn on **Second gun** on the settings board, then draw one from each hip. Duels need both holstered, and touching either before DRAW! is a foul |
 | Holster | Let go of the grip with the gun at your hip |
 | Drop / throw | Let go anywhere else: the gun is a rigid body, so it falls, clatters and keeps your hand's momentum. A thrown gun breaks bottles, rings gongs and knocks over duelists (no score) |

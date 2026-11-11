@@ -117,6 +117,10 @@ records.addEventListener('record', () => { targets.dirty = true; });
 
 // Every shot is scored (accuracy), and reacts with the target or surface it hit.
 for (const g of guns) g.addEventListener('shot', (shot) => targets.handleShot(shot));
+// Spinning a gun into its holster earns a little flourish.
+for (const g of guns) {
+  g.addEventListener('twirlHolster', () => targets.text.spawn(g.holster.object.getWorldPosition(new THREE.Vector3()), ['SMOOTH!'], '#ffd36b'));
+}
 
 // Audio may only start after a user gesture: the ENTER VR click counts.
 // Spatial audio: listener on the headset, ambience, terrain echoes. The

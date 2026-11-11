@@ -104,6 +104,13 @@ const RECOIL_KICK_ANG = 9; // rad/s impulse, muzzle up
 const RECOIL_KICK_Z = 0.55; // m/s impulse, backwards
 const RECOIL_SUBSTEP = 1 / 240;
 
+// Twirling: a sharp pitch flick of the wrist spins the gun round the trigger guard.
+const TWIRL_PIVOT = new THREE.Vector3(0, 0.022, -0.012); // trigger guard, gun-local
+const TWIRL_FLICK_RATE = 10; // rad/s of wrist pitch that starts a spin
+const TWIRL_START = 28; // rad/s spin
+const TWIRL_DECAY = 1.4; // 1/s
+const TWIRL_CATCH = 6; // rad/s: below this the hand catches it
+
 const FLASH_TIME = 0.05;
 const RECOIL_KICK_YAW = 2.5; // rad/s, random sideways
 
@@ -178,6 +185,9 @@ export class Revolver extends THREE.EventDispatcher {
     this.ejectTimer = -1;
     this.feedTimer = 0;
     this.recoil = { ang: 0, angVel: 0, z: 0, zVel: 0, yaw: 0, yawVel: 0 };
+    this.twirlAngle = 0;
+    this.twirlVel = 0;
+    this.twirlTurns = 0;
     this.flashTimer = 0;
     this.fanCooldown = 0;
     this.stickWasBack = false;
@@ -212,8 +222,15 @@ export class Revolver extends THREE.EventDispatcher {
 
     // Everything visual hangs off recoilPivot so recoil never moves the grip
     // origin (the hand) itself.
+    // object -> twirl (pivot at the trigger guard) -> offset -> recoilPivot.
+    this.twirl = new THREE.Group();
+    this.twirl.position.copy(TWIRL_PIVOT);
+    this.object.add(this.twirl);
+    const twirlOffset = new THREE.Group();
+    twirlOffset.position.copy(TWIRL_PIVOT).negate();
+    this.twirl.add(twirlOffset);
     this.recoilPivot = new THREE.Group();
-    this.object.add(this.recoilPivot);
+    twirlOffset.add(this.recoilPivot);
     const root = this.recoilPivot;
 
     // Frame
@@ -388,6 +405,7 @@ export class Revolver extends THREE.EventDispatcher {
 
   /** Snap the grip into `hand`, taking it from the other hand if needed. */
   grab(hand) {
+    this.#endTwirl();
     if (this.hand) this.hand.held = null;
     this.physics.removeBody(this.body);
     this.hand = hand;
@@ -418,10 +436,24 @@ export class Revolver extends THREE.EventDispatcher {
     this.cocked = false;
     this.object.getWorldPosition(_v1);
     this.holster.socket.getWorldPosition(_v2);
+    const spin = this.twirling ? this.twirlVel : 0;
+    if (this.twirling) {
+      // Fold the current spin into the gun's own pose so nothing jumps: a point
+      // p in the gun maps to pivot + Rx(angle)·(p - pivot).
+      const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.twirlAngle);
+      const shift = TWIRL_PIVOT.clone().sub(TWIRL_PIVOT.clone().applyQuaternion(qx));
+      this.object.position.add(shift.applyQuaternion(this.object.quaternion));
+      this.object.quaternion.multiply(qx);
+      this.#endTwirl();
+    }
     if (_v1.distanceTo(_v2) <= HOLSTER_RADIUS) {
       this.#holster(HOLSTER_TIME);
+      if (Math.abs(spin) > TWIRL_CATCH) this.dispatchEvent({ type: 'twirlHolster' }); // spun into the holster
     } else {
-      this.#drop(hand?.throwVelocity, hand?.angularVelocity);
+      // Mid-twirl it flies off still spinning about its pitch axis.
+      const w = hand?.angularVelocity?.clone() ?? new THREE.Vector3();
+      if (spin) w.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(this.object.getWorldQuaternion(new THREE.Quaternion())), spin);
+      this.#drop(hand?.throwVelocity, w);
     }
     this.dispatchEvent({ type: 'release', hand });
   }
@@ -457,6 +489,7 @@ export class Revolver extends THREE.EventDispatcher {
   /** Bring a dropped gun back to the holster (thumbstick click, or out of bounds). */
   /** Put the gun straight into its holster, wherever it is (no animation). */
   stow() {
+    this.#endTwirl();
     if (this.hand) this.hand.held = null;
     this.hand = null;
     this.cocked = false;
@@ -598,10 +631,64 @@ export class Revolver extends THREE.EventDispatcher {
     this.dispatchEvent({ type: 'shot', origin, direction, hit, chamber: this.chamberIndex });
   }
 
+  get twirling() {
+    return this.twirlVel !== 0 || this.twirlAngle !== 0;
+  }
+
+  /** Spin round the trigger guard: start on a sharp pitch flick, catch when it slows. */
+  #updateTwirl(dt, hand, trig) {
+    if (!this.twirling) {
+      if (this.cylinderOpen || this.cocked || trig > 0.2) return false;
+      this.object.getWorldQuaternion(_q1);
+      const pitchAxis = _v2.set(1, 0, 0).applyQuaternion(_q1);
+      const rate = hand.angularVelocity.dot(pitchAxis);
+      if (Math.abs(rate) < TWIRL_FLICK_RATE) return false;
+      this.twirlVel = Math.sign(rate) * TWIRL_START;
+      this.twirlTurns = 0;
+      this.sfx.twirl();
+      this.dispatchEvent({ type: 'twirl' });
+    }
+    const before = Math.floor(this.twirlAngle / (Math.PI * 2));
+    if (Math.abs(this.twirlVel) > TWIRL_CATCH) {
+      this.twirlAngle += this.twirlVel * dt;
+      this.twirlVel *= Math.exp(-TWIRL_DECAY * dt);
+      if (Math.floor(this.twirlAngle / (Math.PI * 2)) !== before) {
+        this.twirlTurns++;
+        this.sfx.twirl();
+        this.xr.pulse(hand, 0.08, 10);
+      }
+    } else {
+      // Caught: settle into the hand on the nearest full turn.
+      const target = Math.round(this.twirlAngle / (Math.PI * 2)) * Math.PI * 2;
+      this.twirlVel = Math.sign(this.twirlVel) * 1e-6; // still "twirling" until settled
+      this.twirlAngle += (target - this.twirlAngle) * Math.min(1, dt * 18);
+      if (Math.abs(target - this.twirlAngle) < 0.02) {
+        this.#endTwirl();
+        this.sfx.click(0.8, 0.3);
+        this.xr.pulse(hand, 0.3, 20);
+        this.dispatchEvent({ type: 'twirlCaught', turns: this.twirlTurns });
+      }
+    }
+    return true;
+  }
+
+  #endTwirl() {
+    this.twirlAngle = 0;
+    this.twirlVel = 0;
+    this.twirl.rotation.x = 0;
+  }
+
   #processInput(dt) {
     const hand = this.hand;
     const trig = hand.values[BUTTON.TRIGGER];
     if (trig < TRIGGER_RESET) this.triggerArmed = true;
+
+    // Mid-twirl the gun can't be cocked, fired or opened.
+    if (this.#updateTwirl(dt, hand, trig)) {
+      this.twirl.rotation.x = this.twirlAngle;
+      this.triggerArmed = false;
+      return;
+    }
 
     // B/Y: swing the cylinder out / in.
     if (hand.justPressed[BUTTON.SECONDARY]) {
