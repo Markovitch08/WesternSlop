@@ -20,6 +20,7 @@ const SUITES = {
   atmosphere: require('./suites/atmosphere.cjs'),
   modes: require('./suites/modes.cjs'),
   audio: require('./suites/audio.cjs'),
+  settings: require('./suites/settings.cjs'),
 };
 
 (async () => {

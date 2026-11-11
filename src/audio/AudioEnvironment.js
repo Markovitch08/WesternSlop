@@ -40,6 +40,8 @@ export class AudioEnvironment {
     this.wind = null;
     /** Overall echo level (0 mutes them). Kept low: a hint of space, not reverb. */
     this.echoLevel = 0.35;
+    /** Ambience volume 0..1 (settings). */
+    this.ambience = 0.7;
   }
 
   /** Resume (or create) the AudioContext. Safe to call on every gesture. */
@@ -75,6 +77,16 @@ export class AudioEnvironment {
       return;
     }
     this.ctx.resume().then(ready, () => {});
+  }
+
+  /** Ambience volume, 0..1. */
+  setAmbience(v) {
+    this.ambience = v;
+    if (!this.unlocked) return;
+    this.layers.whistle.setVolume(0.05 * v);
+    this.layers.crickets.setVolume(0.05 * v);
+    this.creakBus.gain.value = 0.12 * v;
+    this.paramTimer = 0; // the wind follows on the next update
   }
 
   /** Hook unlock() to the first user gestures (DOM, XR controller, XR session). */
@@ -182,7 +194,7 @@ export class AudioEnvironment {
     const wind = new THREE.Audio(this.listener);
     wind.setBuffer(windBuf);
     wind.setLoop(true);
-    wind.setVolume(0.35);
+    wind.setVolume(0.35 * this.ambience);
     this.windFilter = ctx.createBiquadFilter();
     this.windFilter.type = 'lowpass';
     this.windFilter.frequency.value = 450;
@@ -198,7 +210,7 @@ export class AudioEnvironment {
     const whistle = new THREE.Audio(this.listener);
     whistle.setBuffer(windBuf);
     whistle.setLoop(true);
-    whistle.setVolume(0.05);
+    whistle.setVolume(0.05 * this.ambience);
     whistle.setFilters([this.windWhistle]);
     whistle.offset = 2.7;
     whistle.play();
@@ -208,13 +220,13 @@ export class AudioEnvironment {
     const crickets = new THREE.Audio(this.listener);
     crickets.setBuffer(cricketBuffer(ctx, 6));
     crickets.setLoop(true);
-    crickets.setVolume(0.05);
+    crickets.setVolume(0.05 * this.ambience);
     crickets.play();
     this.layers.crickets = crickets;
 
     // Creaks are scheduled one-shots (see update), on their own bus.
     this.creakBus = ctx.createGain();
-    this.creakBus.gain.value = 0.12;
+    this.creakBus.gain.value = 0.12 * this.ambience;
     this.creakBus.connect(out);
     this.sr = sr;
   }
@@ -264,7 +276,7 @@ export class AudioEnvironment {
     if (wind && this.paramTimer <= 0) {
       this.paramTimer = 0.1;
       const g = wind.gust;
-      this.layers.wind.gain.gain.setTargetAtTime(0.18 + g * 0.45, t, 0.4);
+      this.layers.wind.gain.gain.setTargetAtTime((0.18 + g * 0.45) * this.ambience, t, 0.4);
       this.windFilter.frequency.setTargetAtTime(280 + g * 650, t, 0.4);
       this.windWhistle.frequency.setTargetAtTime(700 + g * 600, t, 0.6);
     }

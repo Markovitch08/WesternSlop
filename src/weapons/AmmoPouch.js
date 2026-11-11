@@ -69,6 +69,11 @@ export class AmmoPouch {
     xr.addEventListener('squeezeend', ({ hand }) => this.#onSqueezeEnd(hand));
   }
 
+  /** Move the pouch to the other hip (handedness setting). */
+  setSide(side) {
+    this.side = side;
+  }
+
   get #sign() {
     return this.side === 'right' ? 1 : -1;
   }

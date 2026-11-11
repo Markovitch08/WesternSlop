@@ -32,6 +32,8 @@ export class SoundFX {
      * chains connected makes the graph grow for as long as you play.
      */
     this.pending = [];
+    /** Effects volume 0..1 (settings). */
+    this.volume = 1;
     /** Chains disconnected so far (tests and debugging). */
     this.disposed = 0;
     /** Counts of each sound played; handy for tests and debugging. */
@@ -50,6 +52,12 @@ export class SoundFX {
     camera.getWorldPosition(_pos);
     this.listenerPos.copy(_pos);
     this.sweep();
+  }
+
+  /** Effects volume, 0..1. */
+  setVolume(v) {
+    this.volume = v;
+    if (this.master) this.master.gain.value = 0.9 * v; // a 10% step: no ramp needed
   }
 
   /** Disconnect per-sound nodes whose sound has finished (by the audio clock). */
@@ -124,7 +132,7 @@ export class SoundFX {
     comp.attack.value = 0.004;
     comp.release.value = 0.3;
     this.master = ctx.createGain();
-    this.master.gain.value = 0.9;
+    this.master.gain.value = 0.9 * this.volume;
     this.master.connect(comp).connect(this.output);
 
     // Two seconds of white noise, reused by every effect.

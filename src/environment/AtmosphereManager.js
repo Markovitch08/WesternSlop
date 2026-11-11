@@ -335,7 +335,7 @@ export class AtmosphereManager {
     body.add(light);
 
     return {
-      post, pivot, body, light, glass, flame,
+      post, pivot, body, light, glass, flame, shadowCapable: castShadow,
       base: light.intensity, phase: Math.random() * 100,
       swing: 0, swingVel: 0, roll: 0, rollVel: 0,
     };
@@ -360,6 +360,35 @@ export class AtmosphereManager {
     l.rollVel += (-(9.81 / 0.34) * Math.sin(l.roll) - 1.2 * l.rollVel - w.x * push * 8) * dt;
     l.roll += l.rollVel * dt;
     l.pivot.rotation.set(l.swing, 0, l.roll);
+  }
+
+  /**
+   * Quality preset: shadow map size and softness, lantern shadows, dust count.
+   * @param {'high'|'medium'|'low'} q
+   */
+  setQuality(q, renderer) {
+    const p = {
+      high: { map: 2048, soft: true, lantern: true, dust: DUST_COUNT },
+      medium: { map: 1024, soft: false, lantern: false, dust: 500 },
+      low: { map: 512, soft: false, lantern: false, dust: 250 },
+    }[q];
+    this.quality = q;
+    if (this.sun.shadow.mapSize.x !== p.map) {
+      this.sun.shadow.mapSize.set(p.map, p.map);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    for (const l of this.lanterns) {
+      if (l.shadowCapable) l.light.castShadow = p.lantern;
+    }
+    this.dust.points.geometry.setDrawRange(0, p.dust);
+    const type = p.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    if (renderer.shadowMap.type !== type) {
+      renderer.shadowMap.type = type;
+      this.scene.traverse((o) => {
+        if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true;
+      });
+    }
   }
 
   // -------------------------------------------------------------------------

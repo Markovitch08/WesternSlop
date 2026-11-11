@@ -18,6 +18,8 @@ import { DuelHUD } from './ui/DuelHUD.js';
 import { DuelMode } from './game/DuelMode.js';
 import { PopupMode } from './game/PopupMode.js';
 import { TargetManager } from './targets/TargetManager.js';
+import { Settings } from './game/Settings.js';
+import { SettingsBoard } from './ui/SettingsBoard.js';
 
 // ---------------------------------------------------------------------------
 // Renderer — tuned for standalone headsets (Quest 2/3 at 72–90 Hz).
@@ -115,6 +117,61 @@ revolver.addEventListener('shot', (shot) => targets.handleShot(shot));
 // AudioContext resumes on the first click / trigger / grip / XR session start.
 const audio = new AudioEnvironment(camera, scene, sfx, environment.reflectors);
 audio.installUnlockHandlers(renderer, xr);
+
+// ---------------------------------------------------------------------------
+// Settings: a board beside the bench (point an empty hand + trigger, or click).
+// ---------------------------------------------------------------------------
+const settings = new Settings();
+const settingsBoard = new SettingsBoard(scene, settings, ['handedness', 'turning', 'sfxVolume', 'ambienceVolume', 'quality']);
+staticColliders.push(...settingsBoard.colliders);
+colliders.length = 0;
+colliders.push(...staticColliders);
+settings.addEventListener('change', ({ key, value }) => {
+  if (key === 'handedness') {
+    // The gun hand's hip gets the holster; the other hip gets the cartridges.
+    holster.setSide(value);
+    pouch.setSide(value === 'right' ? 'left' : 'right');
+  } else if (key === 'sfxVolume') sfx.setVolume(value);
+  else if (key === 'ambienceVolume') audio.setAmbience(value);
+  else if (key === 'quality') atmosphere.setQuality(value, renderer);
+});
+settings.applyAll();
+xr.addEventListener('selectstart', ({ hand }) => {
+  if (hand.held === null) settingsBoard.pressWithHand(hand);
+});
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (renderer.xr.isPresenting) return;
+  const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(ndc, camera);
+  settingsBoard.pressRay(ray.ray.origin, ray.ray.direction);
+});
+
+// Turning on either thumbstick's X: snap 30° or smooth, around the head.
+const SNAP_ANGLE = Math.PI / 6;
+const SMOOTH_RATE = Math.PI / 2; // rad/s at full tilt
+let snapArmed = true;
+const _headPos = new THREE.Vector3();
+function turnRig(angle) {
+  camera.getWorldPosition(_headPos);
+  playerRig.position.sub(_headPos).applyAxisAngle(THREE.Object3D.DEFAULT_UP, angle).add(_headPos);
+  playerRig.rotation.y += angle;
+  playerRig.updateMatrixWorld(true);
+}
+function updateTurning(dt) {
+  const mode = settings.get('turning');
+  let x = 0;
+  for (const h of xr.hands) if (h.connected && Math.abs(h.thumbstick.x) > Math.abs(x)) x = h.thumbstick.x;
+  if (mode === 'snap') {
+    if (Math.abs(x) < 0.3) snapArmed = true;
+    else if (snapArmed && Math.abs(x) > 0.7) {
+      snapArmed = false;
+      turnRig(-Math.sign(x) * SNAP_ANGLE);
+    }
+  } else if (mode === 'smooth' && Math.abs(x) > 0.2) {
+    turnRig(-x * SMOOTH_RATE * dt);
+  }
+}
 xr.addEventListener('connected', ({ hand }) =>
   console.info(`[XR] ${hand.handedness} controller connected (${hand.inputSource.profiles[0] ?? 'unknown'})`),
 );
@@ -147,6 +204,7 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 1 / 30);
 
   xr.update(dt);
+  updateTurning(dt);
   holster.update(camera, dt);
   pouch.update(camera, dt);
   targets.update(dt);
@@ -165,4 +223,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard };

@@ -39,6 +39,19 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | Fire (double action) | Full, heavy trigger pull: the hammer rises with the trigger and drops at the break |
 | Aim | Line the brass bead on the front blade up in the rear notch. Bullets fly at 260 m/s and drop under gravity; the sights are zeroed at 15 m (about 2 cm low up close, about 1.5 cm low at 25 m) |
 
+## Settings
+
+A board to the right of the bench. Point an empty hand at a ◀ or ▶ and pull the trigger (or click it on
+desktop). Settings are saved on the device.
+
+| Setting | Choices |
+| --- | --- |
+| Handedness | Right or left: the holster goes on your gun hand's hip, the cartridge pouch on the other |
+| Turning | Off, snap 30° or smooth, on either thumbstick (left/right). Turns around your head |
+| Effects volume | 0–100% |
+| Ambience volume | 0–100% |
+| Quality | High (2048 soft shadows, lantern shadow, 800 dust motes), Medium (1024, no lantern shadow, 500) or Low (512, 250) |
+
 ## The range
 
 **Home** is static target practice. There are no pop-ups, and you shoot at your own pace:
@@ -147,6 +160,7 @@ must be disconnected once the sound is over. Run one suite with
 | `src/game/DuelMode.js` | Quick-draw duel mode: round flow, countdown, fouls, outlaw ladder |
 | `src/game/PopupMode.js` | Timed pop-up outlaw mode |
 | `src/targets/PlateRack.js` | Knock-down steel plate rack |
+| `src/game/Settings.js`, `src/ui/SettingsBoard.js` | Saved player settings and the in-world board |
 | `src/ui/DuelHUD.js` | Game-mode sign fixed over the range, and the red hit flash |
 | `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |
 | `src/util/` | Procedural canvas textures, geometry helpers |

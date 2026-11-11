@@ -29,6 +29,7 @@ export class Holster {
     const belt = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.14), leather);
     belt.position.set(-0.035 * this.#sign, 0.0, -0.03);
     this.object.add(belt);
+    this.belt = belt;
 
     // Where the revolver's grip origin sits when holstered: barrel pointing down.
     this.socket = new THREE.Object3D();
@@ -36,6 +37,12 @@ export class Holster {
     this.object.add(this.socket);
 
     parent.add(this.object);
+  }
+
+  /** Move the holster to the other hip (handedness setting). */
+  setSide(side) {
+    this.side = side;
+    this.belt.position.x = -0.035 * this.#sign;
   }
 
   get #sign() {
