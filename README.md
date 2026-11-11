@@ -25,7 +25,7 @@ Every push to the deploy branch rebuilds and redeploys the site (`.github/workfl
 | --- | --- |
 | Draw / hold the revolver | Hold the **grip** button with your hand at your right hip, where the holster is. The gun only stays in your hand while you keep holding grip |
 | Swap hands | Squeeze the other hand's grip near the gun |
-| Twirl | With your trigger finger off and the hammer down, flick your wrist sharply up or down: the gun spins round the trigger guard and you catch it after a turn or two. It can't fire mid-spin. Let go at the hip mid-spin to spin it into the holster |
+| Twirl | With your trigger finger off and the hammer down, flick your wrist sharply up or down: the gun spins round the trigger guard and you catch it after a turn or two. It can't fire mid-spin. Pull the trigger mid-spin to catch it on your finger at once (it won't fire). Let go at the hip mid-spin to spin it into the holster |
 | Dual wield | Turn on **Second gun** on the settings board, then draw one from each hip. Duels need both holstered, and touching either before DRAW! is a foul |
 | Holster | Let go of the grip with the gun at your hip |
 | Drop / throw | Let go anywhere else: the gun is a rigid body, so it falls, clatters and keeps your hand's momentum. A thrown gun breaks bottles, rings gongs and knocks over duelists (no score) |
@@ -55,6 +55,26 @@ desktop). Settings are saved on the device.
 | Ambience volume | 0–100% |
 | Quality | High (2048 soft shadows, lantern shadow, 800 dust motes), Medium (1024, no lantern shadow, 500) or Low (512, 250) |
 | Performance meter | A watch on your off-hand wrist: fps (green ≥ 70, amber ≥ 60, red below), average and worst frame time over the last second, and draw calls |
+
+## The radio
+
+An old cathedral radio on the bench plays spaghetti-western music. Point an empty hand at a brass knob and pull
+the trigger (or click it on desktop): **⏻** power, **−** / **+** volume, **⏭** next track. It shuffles through
+the playlist, playing every track before any repeats, and moves on when a track ends. Power and volume are saved.
+The music streams with a band-limited old-radio tone and a faint crackle, and it comes from the radio.
+
+### Music credits
+
+| Title | Composer | License | Source |
+| --- | --- | --- | --- |
+| Spaghetti Western | Spring Spring | CC0 | [OpenGameArt](https://opengameart.org/content/spaghetti-western) |
+| No Country For Old Alex | Pro Sensory | CC0 | [OpenGameArt](https://opengameart.org/content/no-country-for-old-alex) |
+| Showdown | el-corleo | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | [OpenGameArt](https://opengameart.org/content/showdown) |
+| Spaghetti Western Theme (Orchestral) | linxiaoma | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [OpenGameArt](https://opengameart.org/content/spaghetti-western-theme-orchestral) |
+| Western | shalpin | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | [OpenGameArt](https://opengameart.org/content/western) |
+| Two Guns, One Destiny | Silverman Sound Studios | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [silvermansound.com](https://www.silvermansound.com/free-music/two-guns-one-destiny) |
+
+The tracks were re-encoded to 128 kbps MP3 and are otherwise unchanged. See `public/music/CREDITS.md`.
 
 ## The range
 
@@ -173,6 +193,7 @@ must be disconnected once the sound is over. Run one suite with
 | `src/targets/PlateRack.js` | Knock-down steel plate rack |
 | `src/game/Settings.js`, `src/ui/SettingsBoard.js` | Saved player settings and the in-world board |
 | `src/ui/PerfMeter.js` | Wrist performance meter |
+| `src/audio/Radio.js`, `public/music/` | The bench radio and its soundtrack |
 | `src/game/Records.js` | Saved best results |
 | `src/ui/DuelHUD.js` | Game-mode sign fixed over the range, and the red hit flash |
 | `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |

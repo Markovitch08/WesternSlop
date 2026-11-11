@@ -11,6 +11,8 @@ export const SETTINGS = {
   ambienceVolume: { label: 'Ambience volume', values: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1], percent: true },
   quality: { label: 'Quality', values: ['high', 'medium', 'low'], names: ['High', 'Medium', 'Low'] },
   perfMeter: { label: 'Performance meter', values: [false, true], names: ['Off', 'On'] },
+  musicOn: { label: 'Radio', values: [false, true], names: ['Off', 'On'] },
+  musicVolume: { label: 'Radio volume', values: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1], percent: true },
 };
 
 export const DEFAULTS = {
@@ -21,6 +23,8 @@ export const DEFAULTS = {
   ambienceVolume: 0.7,
   quality: 'high',
   perfMeter: false,
+  musicOn: true,
+  musicVolume: 0.5,
 };
 
 /**

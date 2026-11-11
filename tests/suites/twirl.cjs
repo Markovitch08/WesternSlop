@@ -89,14 +89,32 @@ module.exports = async function twirlSuite() {
   await frames(3);
   check('the gun spins round the trigger guard', Math.abs(rev.twirl.rotation.x) > 0.5, rev.twirl.rotation.x.toFixed(2));
   const shots = played('gunshot');
-  await pull();
-  check('it cannot fire mid-spin', played('gunshot') === shots);
+  // A half pull (no catch, no double-action break) mid-spin: nothing fires.
+  rgp.buttons[0].value = 0.45; rgp.buttons[0].pressed = true; await frames(2);
+  rgp.buttons[0].value = 0; rgp.buttons[0].pressed = false; await frames(1);
+  check('it cannot fire mid-spin', played('gunshot') === shots && rev.twirling);
   check('whoosh as it spins', played('twirl') > whoosh, played('twirl') - whoosh);
   check('caught on a full turn', await until(() => !rev.twirling, 300) && rev.twirl.rotation.x === 0 && rev.twirlTurns >= 1, `${rev.twirlTurns} turns`);
   check('a catch rumble', pulses.some((p) => p.i === 0.3 && p.d === 20));
   await frames(3);
   await pull();
   check('fires normally after the catch', played('gunshot') === shots + 1);
+
+  // Pull the trigger mid-spin to catch it right away.
+  await settle();
+  await flick(V(1, 0, 0), 0.5);
+  check('spinning, about to catch it', rev.twirling && Math.abs(rev.twirlVel) > 6);
+  const shotsC = played('gunshot');
+  rgp.buttons[0].value = 1; rgp.buttons[0].pressed = true;
+  pose(R, GUN, level);
+  check('trigger pull catches it fast (< 10 frames)', await until(() => !rev.twirling, 10), `twirling=${rev.twirling}`);
+  await frames(3);
+  check('catching with the trigger does not fire', played('gunshot') === shotsC);
+  rgp.buttons[0].value = 0; rgp.buttons[0].pressed = false;
+  await frames(3);
+  await pull();
+  check('fires on the next pull', played('gunshot') === shotsC + 1,
+    `twirling=${rev.twirling} armed=${rev.triggerArmed} chambers=${rev.chambers.join(',')} cocked=${rev.cocked}`);
 
   // Spin it into the holster.
   await settle();

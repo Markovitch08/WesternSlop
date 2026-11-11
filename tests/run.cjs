@@ -25,6 +25,7 @@ const SUITES = {
   dual: require('./suites/dual.cjs'),
   twirl: require('./suites/twirl.cjs'),
   dodge: require('./suites/dodge.cjs'),
+  radio: require('./suites/radio.cjs'),
 };
 
 (async () => {

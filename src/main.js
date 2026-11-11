@@ -22,6 +22,7 @@ import { Settings } from './game/Settings.js';
 import { SettingsBoard } from './ui/SettingsBoard.js';
 import { PerfMeter } from './ui/PerfMeter.js';
 import { Records } from './game/Records.js';
+import { Radio } from './audio/Radio.js';
 
 // ---------------------------------------------------------------------------
 // Renderer — tuned for standalone headsets (Quest 2/3 at 72–90 Hz).
@@ -157,15 +158,22 @@ settings.addEventListener('change', ({ key, value }) => {
   else if (key === 'perfMeter') perf.enabled = value;
 });
 settings.applyAll();
+// An old radio on the bench plays the western soundtrack (shuffled).
+const radio = new Radio(scene, settings, audio);
+staticColliders.push(...radio.colliders);
+colliders.length = 0;
+colliders.push(...staticColliders);
+physics.addStaticFromMesh(radio.cabinet);
+
 xr.addEventListener('selectstart', ({ hand }) => {
-  if (hand.held === null) settingsBoard.pressWithHand(hand);
+  if (hand.held === null) settingsBoard.pressWithHand(hand) || radio.pressWithHand(hand);
 });
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (renderer.xr.isPresenting) return;
   const ndc = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   const ray = new THREE.Raycaster();
   ray.setFromCamera(ndc, camera);
-  settingsBoard.pressRay(ray.ray.origin, ray.ray.direction);
+  settingsBoard.pressRay(ray.ray.origin, ray.ray.direction) || radio.pressRay(ray.ray.origin, ray.ray.direction);
 });
 
 // Turning on either thumbstick's X: snap 30° or smooth, around the head.
@@ -243,10 +251,11 @@ renderer.setAnimationLoop(() => {
   atmosphere.update(dt, camera);
   sfx.updateListener(camera);
   audio.update(dt, atmosphere.wind);
+  radio.update();
   if (orbit.enabled) orbit.update();
 
   renderer.render(scene, camera);
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, revolver2, holster2, guns, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf, records };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, revolver2, holster2, guns, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf, records, radio };

@@ -110,6 +110,7 @@ const TWIRL_FLICK_RATE = 10; // rad/s of wrist pitch that starts a spin
 const TWIRL_START = 28; // rad/s spin
 const TWIRL_DECAY = 1.4; // 1/s
 const TWIRL_CATCH = 6; // rad/s: below this the hand catches it
+const TWIRL_COOLDOWN = 0.35; // s after a catch before the same flick can start another spin
 
 const FLASH_TIME = 0.05;
 const RECOIL_KICK_YAW = 2.5; // rad/s, random sideways
@@ -638,7 +639,8 @@ export class Revolver extends THREE.EventDispatcher {
   /** Spin round the trigger guard: start on a sharp pitch flick, catch when it slows. */
   #updateTwirl(dt, hand, trig) {
     if (!this.twirling) {
-      if (this.cylinderOpen || this.cocked || trig > 0.2) return false;
+      this.twirlCooldown = Math.max(0, (this.twirlCooldown ?? 0) - dt);
+      if (this.cylinderOpen || this.cocked || trig > 0.2 || this.twirlCooldown > 0) return false;
       this.object.getWorldQuaternion(_q1);
       const pitchAxis = _v2.set(1, 0, 0).applyQuaternion(_q1);
       const rate = hand.angularVelocity.dot(pitchAxis);
@@ -649,6 +651,12 @@ export class Revolver extends THREE.EventDispatcher {
       this.dispatchEvent({ type: 'twirl' });
     }
     const before = Math.floor(this.twirlAngle / (Math.PI * 2));
+    // Pull the trigger mid-spin to catch it on your finger right away. (It
+    // doesn't fire: the trigger has to come back up first.)
+    if (Math.abs(this.twirlVel) > TWIRL_CATCH && trig > 0.5) {
+      this.twirlVel = Math.sign(this.twirlVel) * TWIRL_CATCH * 0.99;
+      this.twirlQuickCatch = true;
+    }
     if (Math.abs(this.twirlVel) > TWIRL_CATCH) {
       this.twirlAngle += this.twirlVel * dt;
       this.twirlVel *= Math.exp(-TWIRL_DECAY * dt);
@@ -661,9 +669,10 @@ export class Revolver extends THREE.EventDispatcher {
       // Caught: settle into the hand on the nearest full turn.
       const target = Math.round(this.twirlAngle / (Math.PI * 2)) * Math.PI * 2;
       this.twirlVel = Math.sign(this.twirlVel) * 1e-6; // still "twirling" until settled
-      this.twirlAngle += (target - this.twirlAngle) * Math.min(1, dt * 18);
+      this.twirlAngle += (target - this.twirlAngle) * Math.min(1, dt * (this.twirlQuickCatch ? 30 : 18));
       if (Math.abs(target - this.twirlAngle) < 0.02) {
         this.#endTwirl();
+        this.twirlCooldown = TWIRL_COOLDOWN;
         this.sfx.click(0.8, 0.3);
         this.xr.pulse(hand, 0.3, 20);
         this.dispatchEvent({ type: 'twirlCaught', turns: this.twirlTurns });
@@ -675,6 +684,7 @@ export class Revolver extends THREE.EventDispatcher {
   #endTwirl() {
     this.twirlAngle = 0;
     this.twirlVel = 0;
+    this.twirlQuickCatch = false;
     this.twirl.rotation.x = 0;
   }
 
