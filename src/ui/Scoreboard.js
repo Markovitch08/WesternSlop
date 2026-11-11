@@ -40,6 +40,7 @@ export class Scoreboard {
   }
 
   /** @param {object} stats see TargetManager.stats */
+  /** @param {object} stats see TargetManager.stats (records come from `this.records`, if set) */
   draw(stats) {
     const g = this.ctx;
     const W = this.canvas.width;
@@ -100,10 +101,17 @@ export class Scoreboard {
       ? `Last: ${r.label} · ${r.distance.toFixed(1)} m · ${Math.round(r.precision * 100)}%` +
         (r.reaction != null ? ` · ${r.reaction.toFixed(2)} s` : '') + ` · +${r.points}`
       : 'Last: —';
-    g.fillText(lastLine, 60, 575);
+    g.fillText(lastLine, 60, 568);
+    // Saved best results (kept between sessions).
+    this.recordsLine = this.records ? this.records.summary() : '';
+    if (this.recordsLine) {
+      g.fillStyle = '#ffd36b';
+      g.font = '32px Georgia, serif';
+      g.fillText(this.recordsLine, 60, 618);
+    }
     g.fillStyle = 'rgba(239,232,214,0.6)';
-    g.font = 'italic 30px Georgia, serif';
-    g.fillText('Plates: red resets · black DUEL · orange POP-UPS', 60, 650);
+    g.font = 'italic 28px Georgia, serif';
+    g.fillText('Plates: red resets · black DUEL · orange POP-UPS', 60, 668);
 
     this.texture.needsUpdate = true;
     this.redraws++;

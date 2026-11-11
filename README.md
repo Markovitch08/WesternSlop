@@ -78,6 +78,9 @@ it ends:
 
 The cardboard outlaws only appear while a mode is running.
 
+**Records** are saved on the device and shown on the scoreboard: your fastest duel draw, your furthest duel
+ladder run (★ once you've beaten all five), and your best pop-up score. The sign calls out a new record.
+
 ## Atmosphere and sound
 
 - **Light:** a low golden-hour sun (`0xffb56b`) with long, soft shadows and a cool violet ambient fill
@@ -163,6 +166,7 @@ must be disconnected once the sound is over. Run one suite with
 | `src/targets/PlateRack.js` | Knock-down steel plate rack |
 | `src/game/Settings.js`, `src/ui/SettingsBoard.js` | Saved player settings and the in-world board |
 | `src/ui/PerfMeter.js` | Wrist performance meter |
+| `src/game/Records.js` | Saved best results |
 | `src/ui/DuelHUD.js` | Game-mode sign fixed over the range, and the red hit flash |
 | `src/ui/Scoreboard.js`, `FloatingText.js` | Chalkboard and floating score pop-ups in the world |
 | `src/util/` | Procedural canvas textures, geometry helpers |

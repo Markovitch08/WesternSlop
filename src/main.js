@@ -21,6 +21,7 @@ import { TargetManager } from './targets/TargetManager.js';
 import { Settings } from './game/Settings.js';
 import { SettingsBoard } from './ui/SettingsBoard.js';
 import { PerfMeter } from './ui/PerfMeter.js';
+import { Records } from './game/Records.js';
 
 // ---------------------------------------------------------------------------
 // Renderer — tuned for standalone headsets (Quest 2/3 at 72–90 Hz).
@@ -109,6 +110,13 @@ const modes = { current: null };
 const hud = new DuelHUD(scene, camera);
 const duel = new DuelMode({ targets, revolver, sfx, xr, fx, camera, hud, modes });
 const popups = new PopupMode({ targets, revolver, sfx, hud, modes });
+
+// Best results, saved on the device and shown on the scoreboard.
+const records = new Records();
+records.watch(duel, popups, hud);
+targets.scoreboard.records = records;
+targets.dirty = true;
+records.addEventListener('record', () => { targets.dirty = true; });
 
 // Every shot is scored (accuracy), and reacts with the target or surface it hit.
 revolver.addEventListener('shot', (shot) => targets.handleShot(shot));
@@ -230,4 +238,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf, records };

@@ -127,6 +127,8 @@ module.exports = async function duelSuite() {
   check('hit before he fires: round won', duel.state === 'result' && r1?.won === true, JSON.stringify(r1));
   check('draw time measured from the signal', r1 && r1.time > 0 && r1.time < r1.outlawTime, r1 && `${r1.time.toFixed(2)} < ${r1.outlawTime}`);
   check('sign shows your time', duel.hud.text.endsWith(' s') && duel.hud.sub.includes('beat him'), `${duel.hud.text} | ${duel.hud.sub}`);
+  check('a real draw is saved as the record', g.records.values.duelBestDraw === r1.time && duel.hud.sub.includes('NEW RECORD DRAW'),
+    `${g.records.values.duelBestDraw} | ${duel.hud.sub.replace('\n', ' | ')}`);
 
   // --- Round 2: a faster outlaw, and we're too slow -------------------------------------
   check('next round asks you to holster', await until(() => duel.state === 'holster', 300) && duel.hud.text === 'ROUND 2', duel.hud.text);

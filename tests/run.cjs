@@ -21,6 +21,7 @@ const SUITES = {
   modes: require('./suites/modes.cjs'),
   audio: require('./suites/audio.cjs'),
   settings: require('./suites/settings.cjs'),
+  records: require('./suites/records.cjs'),
 };
 
 (async () => {
