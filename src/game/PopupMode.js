@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUIT_HINT } from './QuitHold.js';
 
 /**
  * Pop-up outlaws, as its own timed game mode (home is static practice).
@@ -76,6 +77,7 @@ export class PopupMode extends THREE.EventDispatcher {
     this.state = PopupState.COUNTDOWN;
     this.timer = 0;
     this.beat = 0;
+    this.hud.hint = QUIT_HINT;
     this.hud.show('3', 'Pop-up outlaws · get ready', '#fff2d8', true);
     this.sfx.countdownTick(false);
     this.dispatchEvent({ type: 'start' });
@@ -87,6 +89,10 @@ export class PopupMode extends THREE.EventDispatcher {
     this.targets.duelEnabled = false;
     this.targets.setDuelistsActive(false);
     this.state = PopupState.IDLE;
+    // Quitting mid-round skips the summary: put the pop-up pace back here too.
+    if (this.savedGap != null) this.targets.popupGap = this.savedGap;
+    this.savedGap = null;
+    this.hud.hint = '';
     this.hud.hide();
     if (this.modes.current === this) this.modes.current = null;
     this.dispatchEvent({ type: 'end', score: this.score });

@@ -130,6 +130,43 @@ module.exports = async function dodgeSuite() {
   check('the sign credits the dodge', duel.hud.sub.includes('dodged 1 shot'), duel.hud.sub);
   duel.stop();
   cam.position.copy(home);
+  await frames(3);
+
+  // --- Dodging forever without hitting him: the round times out -------------------------
+  const { DRAW_TIMEOUT } = await import('/src/game/DuelMode.js');
+  pose(R, holster.socket.getWorldPosition(V(0, 0, 0)));
+  await frames(6);
+  xr.dispatchEvent({ type: 'squeezeend', hand: R });
+  check('gun back in the holster', await until(() => rev.state === 'holstered', 120));
+  check('fourth duel at the draw', await startRound());
+  const opp4 = duel.opponent;
+  // Step off his line each time he has locked his aim (the frame after it is set).
+  let side = 1;
+  let stepped = false;
+  const t4 = performance.now();
+  const ended = await until(() => {
+    if (duel.aimPoint && !stepped) { cam.position.x = home.x + 0.5 * side; side = -side; stepped = true; }
+    if (!duel.aimPoint) stepped = false;
+    return duel.state !== 'draw';
+  }, 3000);
+  const r4 = duel.results.at(-1);
+  check('dodging every shot and never hitting him: the round still ends', ended && duel.dodges >= 2,
+    `state=${duel.state} dodges=${duel.dodges} after ${((performance.now() - t4) / 1000).toFixed(1)} s`);
+  check('as a loss: TOO SLOW, he got away', r4?.won === false && r4.how === 'timeout' && duel.hud.text === 'TOO SLOW' && duel.drawTime <= DRAW_TIMEOUT + 0.1,
+    `${duel.hud.text} ${JSON.stringify(r4)}`);
+  check('he goes back down', await until(() => !opp4.isLive, 200));
+  check('then the summary and home', await until(() => duel.state === 'idle', 1500) && g.modes.current === null, duel.state);
+
+  // --- His target drops on its own (no hit either way): the round ends at once -----------
+  check('fifth duel at the draw', await startRound());
+  const opp5 = duel.opponent;
+  await until(() => opp5.state === 'up', 60);
+  opp5.retire(); // what a timed-out pop-up target does
+  await frames(2);
+  check('he dropped without a hit: TOO SLOW straight away', duel.state === 'result' && duel.results.at(-1)?.how === 'timeout' && duel.drawTime < DRAW_TIMEOUT,
+    `${duel.state} ${duel.drawTime?.toFixed(2)}`);
+  check('and home again', await until(() => duel.state === 'idle', 1500) && g.modes.current === null, duel.state);
+  cam.position.copy(home);
   await frames(30);
   check('arm back down once it is over', g.targets.duelists.every((d) => d.aimLevel < 0.05));
   return out;

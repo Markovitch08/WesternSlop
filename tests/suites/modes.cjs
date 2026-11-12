@@ -133,5 +133,47 @@ module.exports = async function modesSuite() {
   check('back home after the summary', await until(() => popups.state === 'idle', 400) && modes.current === null);
   check('outlaws packed away, random pop-ups off', tm.duelists.every((d) => !d.active) && !tm.duelEnabled);
   check('draw calls within budget', g.renderer.info.render.calls < 120, g.renderer.info.render.calls);
+
+  // --- Quitting a mode: hold B / Y on a free hand ----------------------------------
+  const { QUIT_HOLD } = await import('/src/game/QuitHold.js');
+  const lgp = L.inputSource.gamepad;
+  // Hold B / Y until the quit control has counted `seconds` of game time (or the mode ended).
+  const holdB = async (gp, seconds, maxFrames = 600) => {
+    gp.buttons[5].pressed = true;
+    let counted = 0;
+    for (let i = 0; i < maxFrames && modes.current; i++) {
+      await frames(1);
+      counted = Math.max(counted, g.quitHold.held);
+      if (counted >= seconds) break;
+    }
+    gp.buttons[5].pressed = false;
+    await frames(2);
+    return counted;
+  };
+  const holdY = (seconds) => holdB(lgp, seconds);
+  const gap0 = tm.popupGap;
+  popups.duration = 60; // long enough not to end on its own here
+  popups.start();
+  check('the sign says how to quit', popups.hud.hint.includes('B / Y'), popups.hud.hint);
+  await until(() => popups.state === 'play', 200);
+  check('pop-ups running', popups.state === 'play' && tm.popupGap !== gap0);
+  await holdY(QUIT_HOLD * 0.4);
+  check('a short press does not quit', popups.state === 'play' && g.quitHold.held === 0);
+  check('gun in hand', R.held === rev);
+  const gunHeld = await holdB(rgp, QUIT_HOLD, 120);
+  check('B on the gun hand does not quit (the gun uses it)', popups.state === 'play' && gunHeld === 0, gunHeld);
+  await holdY(QUIT_HOLD + 0.3);
+  check('holding Y on the free hand quits pop-ups', popups.state === 'idle' && modes.current === null && !popups.hud.sprite.visible,
+    `${popups.state} Lheld=${L.held?.constructor?.name ?? L.held} quits=${g.quitHold.quits} pressed=${L.pressed[5]}`);
+  check('quitting mid-round restores the pop-up pace and packs the outlaws away', tm.popupGap === gap0 && tm.duelists.every((d) => !d.active), `${tm.popupGap} vs ${gap0}`);
+  check('the quit hint goes with it', popups.hud.hint === '');
+
+  duel.waitRange = [0.3, 0.4];
+  duel.start();
+  check('duel running', duel.active && modes.current === duel && duel.hud.hint !== '');
+  await holdY(QUIT_HOLD + 0.3);
+  check('holding Y quits a duel too', !duel.active && modes.current === null && !duel.hud.sprite.visible && tm.duelists.every((d) => !d.active));
+  check('and a new mode can start straight away', (duel.start(), duel.active));
+  duel.stop();
   return out;
 };

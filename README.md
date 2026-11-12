@@ -163,7 +163,11 @@ help, because he aims at where you are.
 
 Touching your gun before "DRAW!" is **JUMPED THE GUN**: holster again to restart the round. Losing a round ends
 the run with a summary of outlaws beaten and your best draw; beat all five to be the **FASTEST GUN** in the West.
-The outlaws pack away when the duel ends.
+The outlaws pack away when the duel ends. If you haven't hit him within 6 s of "DRAW!" (dodging forever, say),
+or his target drops without a hit, he gets away: **TOO SLOW**, and the round is lost.
+
+**Quitting a mode:** hold **B or Y on an empty hand** for 1 s to leave a duel or a pop-up round straight away.
+The sign shows this reminder along its top while a mode runs.
 
 ## Test
 

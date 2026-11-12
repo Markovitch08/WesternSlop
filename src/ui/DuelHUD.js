@@ -45,6 +45,8 @@ export class DuelHUD {
     /** Last message shown, for tests and debugging. */
     this.text = '';
     this.sub = '';
+    /** Small line along the top while a game mode runs (how to quit), or ''. */
+    this.hint = '';
   }
 
   /**
@@ -83,6 +85,13 @@ export class DuelHUD {
     g.strokeText(text, W / 2, y);
     g.fillStyle = color;
     g.fillText(text, W / 2, y);
+    if (this.hint) {
+      g.font = 'italic 30px Georgia, serif';
+      g.lineWidth = 6;
+      g.strokeText(this.hint, W / 2, 58);
+      g.fillStyle = 'rgba(255, 242, 216, 0.75)';
+      g.fillText(this.hint, W / 2, 58);
+    }
     subLines.forEach((line, i) => {
       const ly = subLines.length > 1 ? 300 + i * 66 : 350;
       fit(line, 58, 20);

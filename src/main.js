@@ -18,6 +18,7 @@ import { AmmoPouch } from './weapons/AmmoPouch.js';
 import { DuelHUD } from './ui/DuelHUD.js';
 import { DuelMode } from './game/DuelMode.js';
 import { PopupMode } from './game/PopupMode.js';
+import { QuitHold } from './game/QuitHold.js';
 import { TargetManager } from './targets/TargetManager.js';
 import { Settings } from './game/Settings.js';
 import { SettingsBoard } from './ui/SettingsBoard.js';
@@ -112,6 +113,7 @@ const modes = { current: null };
 const hud = new DuelHUD(scene, camera);
 const duel = new DuelMode({ targets, revolver, guns: [...guns, rifle], sfx, xr, fx, camera, hud, modes });
 const popups = new PopupMode({ targets, revolver, guns: [...guns, rifle], sfx, hud, modes });
+const quitHold = new QuitHold({ xr, modes });
 
 // Best results, saved on the device and shown on the scoreboard.
 const records = new Records();
@@ -256,6 +258,7 @@ renderer.setAnimationLoop(() => {
   casings.update(dt);
   fx.update(dt);
   popups.update(dt);
+  quitHold.update(dt);
   duel.update(dt);
   atmosphere.update(dt, camera);
   sfx.updateListener(camera);
@@ -267,4 +270,4 @@ renderer.setAnimationLoop(() => {
 });
 
 // Exposed for debugging from the browser console / remote devtools.
-window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, revolver2, holster2, guns, rifle, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, atmosphere, audio, settings, settingsBoard, perf, records, radio };
+window.__game = { THREE, scene, renderer, camera, playerRig, xr, revolver, holster, revolver2, holster2, guns, rifle, targets, sfx, environment, physics, pouch, fx, casings, duel, popups, modes, quitHold, atmosphere, audio, settings, settingsBoard, perf, records, radio };

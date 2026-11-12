@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RevolverState } from '../weapons/Revolver.js';
+import { QUIT_HINT } from './QuitHold.js';
 
 /**
  * Quick-draw duel mode: a ladder of outlaws, each faster than the last.
@@ -16,7 +17,8 @@ import { RevolverState } from '../weapons/Revolver.js';
  * so moving your head off the line just as he fires makes him miss (a whizz
  * past your ear); he fires again after REFIRE until one of you hits.
  * Touching the gun before "DRAW!" is a foul: the round restarts.
- * Losing a round ends the run; beating all outlaws wins it. The cardboard
+ * Not hitting him within DRAW_TIMEOUT, or his target dropping without a hit,
+ * loses the round (he gets away), so the duel can never stall. Losing a round ends the run; beating all outlaws wins it. The cardboard
  * outlaws are only shown while a duel (or the pop-up mode) runs.
  */
 export const DuelState = Object.freeze({
@@ -46,6 +48,8 @@ const HIT_RADIUS = 0.22; // m from the bullet's line to your head that still hit
 const REFIRE = 0.9; // s between his shots after a miss
 const RAISE_TIME = 0.35; // s his gun arm takes to come up before he aims
 const TRACER_TIME = 0.18; // s the bullet streak stays visible
+/** s after "DRAW!" with no hit either way before the round is lost (he got away). */
+export const DRAW_TIMEOUT = 6;
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -110,6 +114,7 @@ export class DuelMode extends THREE.EventDispatcher {
     this.round = 0;
     this.results = [];
     this.fouls = 0;
+    this.hud.hint = QUIT_HINT;
     this.#enter(DuelState.HOLSTER);
     this.dispatchEvent({ type: 'start' });
   }
@@ -120,6 +125,7 @@ export class DuelMode extends THREE.EventDispatcher {
     this.opponent?.retire();
     this.opponent = null;
     this.state = DuelState.IDLE;
+    this.hud.hint = '';
     this.hud.hide();
     this.targets.duelEnabled = this.freeRangeWasEnabled;
     this.targets.setDuelistsActive(false); // back to static practice
@@ -260,10 +266,20 @@ export class DuelMode extends THREE.EventDispatcher {
     this.outlawFired = true;
     this.hud.hurt();
     for (const h of this.xr.hands) if (h.connected) this.xr.pulse(h, 1.0, 220);
-    this.results.push({ won: false, time: null, outlawTime: this.outlawTime, zone: null });
-    this.hud.show("YOU'RE DEAD", `${OUTLAW_NAMES[this.round % OUTLAW_NAMES.length]} drew in ${this.outlawTime.toFixed(2)} s`, '#ff5a3c');
+    this.#lose("YOU'RE DEAD", `${OUTLAW_NAMES[this.round % OUTLAW_NAMES.length]} drew in ${this.outlawTime.toFixed(2)} s`, 'shot');
+  }
+
+  #lose(text, sub, how) {
+    this.results.push({ won: false, time: null, outlawTime: this.outlawTime, zone: null, how });
+    this.hud.show(text, sub, '#ff5a3c');
     this.#enter(DuelState.RESULT);
-    this.dispatchEvent({ type: 'roundLost', round: this.round });
+    this.dispatchEvent({ type: 'roundLost', round: this.round, how });
+  }
+
+  /** Too long without a hit: he backs off into cover and the round is lost. */
+  #timeout() {
+    this.outlawFired = true; // so RESULT puts him away
+    this.#lose('TOO SLOW', `${OUTLAW_NAMES[this.round % OUTLAW_NAMES.length]} got away`, 'timeout');
   }
 
   update(dt) {
@@ -320,6 +336,10 @@ export class DuelMode extends THREE.EventDispatcher {
             .add(new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 0).multiplyScalar(AIM_JITTER));
         }
         if (this.drawTime >= this.nextShotAt && this.opponent?.isLive) this.#outlawFires();
+        // Too long, or he dropped out of sight without being hit (a pop-up
+        // target can time out): the round is lost rather than stuck.
+        if (this.state === DuelState.DRAW && !this.pendingWin &&
+          (this.drawTime >= DRAW_TIMEOUT || (this.opponent && !this.opponent.isLive))) this.#timeout();
         break;
 
       case DuelState.RESULT: {
